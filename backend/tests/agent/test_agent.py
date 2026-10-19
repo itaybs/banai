@@ -68,7 +68,7 @@ def test_system_prompt_carries_the_review_rules():
     prompt = build_system_prompt(basic_wardrobe(), load_catalog(), "he")
     assert '"[app] applied: <summary>"' in prompt and "only source of truth" in prompt  # R3
     assert "## Customer-dictated wording" in prompt  # R1
-    assert "less than 90 cm of free height" in prompt and "at least 150 cm" in prompt  # R4
+    assert "the app adds them to your reply" in prompt and "at least 150 cm" in prompt  # R4 (warnings come from code)
     assert "offer 2-3 concrete options" in prompt  # R5
     assert "state the allowed range" in prompt  # R6
     assert "real change made by `ops`" in prompt  # R7
@@ -126,7 +126,7 @@ def test_valid_proposal_is_signed_and_not_applied(make_client):
     fake = FakeClient(completion(calls=[tool_call(PROPOSE, propose([ADD_SHELF]))]))
     data = make_client(fake).post("/api/chat", json=chat_body(design=design, revision=4)).json()["data"]
     proposal = data["proposal"]
-    assert data["reply"] == "Here is my proposal."
+    assert data["reply"].startswith("Here is my proposal.")  # plus a code-added clearance note (shelf at 100 cm)
     assert proposal["baseRevision"] == 4
     assert proposal["baseHash"] == signing.design_hash(basic_wardrobe())
     assert proposal["ops"][0]["id"].startswith("shf_")  # ids are filled before signing

@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.agent.clearances import long_items_note, proposal_warning, with_note
 from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language
 from app.agent.prompts import build_system_prompt
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PROPOSE, TOOLS, AnswerArgs, ClarifyArgs, ProposeArgs
@@ -128,12 +129,13 @@ def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, rev
             if call.function.name == CLARIFY:
                 return TurnResult(reply=ClarifyArgs.model_validate(arguments).question)
             if call.function.name == ANSWER:
-                return TurnResult(reply=AnswerArgs.model_validate(arguments).answer)
+                answer = AnswerArgs.model_validate(arguments).answer
+                return TurnResult(reply=with_note(answer, long_items_note(messages[-1]["text"], design, language)))
             if call.function.name != PROPOSE:
                 raise ValueError(f"unknown tool {call.function.name!r}")
             args = ProposeArgs.model_validate(arguments)
             ops = fill_ids(args.ops)
-            apply_ops(design, ops, catalog)  # dry run on the engine's private copy
+            proposed = apply_ops(design, ops, catalog)  # dry run on the engine's private copy
         except DomainError as error:
             conversation.append(_tool_message(call.id, {"error": error.to_dict(), "hint": "Fix the ops and call propose_changes again."}))
             continue
@@ -141,6 +143,8 @@ def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, rev
             detail = error.errors(include_input=False, include_url=False) if isinstance(error, ValidationError) else str(error)
             conversation.append(_tool_message(call.id, {"error": "invalid tool arguments", "detail": detail}))
             continue
-        return TurnResult(reply=args.reply, proposal=_build_proposal(args, ops, revision, base_hash, signing_key))
+        # The clearance warning is written by code: the model does not use the computed numbers.
+        reply = with_note(args.reply, proposal_warning(design, proposed, ops, language))
+        return TurnResult(reply=reply, proposal=_build_proposal(args, ops, revision, base_hash, signing_key))
 
     return TurnResult(reply=FALLBACK_REPLY[language])
