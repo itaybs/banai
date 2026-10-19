@@ -31,6 +31,7 @@ DEFAULT_TTS_VOICE = "marin"
 MAX_AUDIO_BYTES = 1_000_000
 MAX_TRANSCRIPT_CHARS = 2000  # the chat message limit
 MAX_SPEECH_CHARS = 1000
+SPEECH_TIMEOUT_SECONDS = 20
 AUDIO_TYPES = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "mp4", "audio/wav": "wav", "audio/mpeg": "mp3"}
 # Measured on real Hebrew audio (2026-10-16): English instructions that name Hebrew speak it most
 # clearly; instructions written in Hebrew made the speech worse.
@@ -129,7 +130,8 @@ def speech(
     if not signing.verify_reply(get_signing_key(), request.signature, request.text):
         return localized(403, "BAD_REPLY_SIGNATURE", request.language)
     try:
-        result = client.audio.speech.create(
+        # A reply read aloud late is useless: fail fast instead of the client's 60 s + retry.
+        result = client.with_options(timeout=SPEECH_TIMEOUT_SECONDS, max_retries=0).audio.speech.create(
             model=_model(settings.openai_tts_model, DEFAULT_TTS_MODEL),
             voice=_model(settings.openai_tts_voice, DEFAULT_TTS_VOICE),
             input=spoken(request.text), instructions=SPEECH_STYLE, response_format="mp3",

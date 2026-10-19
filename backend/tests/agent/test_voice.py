@@ -21,11 +21,15 @@ NO_SIGNATURE = "0" * 64
 
 class FakeAudio:
     def __init__(self, text="Add a shelf on the left", error=None, delay=0.0):
-        self.text, self.error, self.delay, self.calls = text, error, delay, []
+        self.text, self.error, self.delay, self.calls, self.options = text, error, delay, [], []
         self.audio = SimpleNamespace(
             transcriptions=SimpleNamespace(create=self._transcribe),
             speech=SimpleNamespace(create=self._speak),
         )
+
+    def with_options(self, **options):  # like OpenAI.with_options: same client, per-call options
+        self.options.append(options)
+        return self
 
     def _transcribe(self, **kwargs):
         self.calls.append(("transcribe", kwargs))
@@ -141,6 +145,7 @@ def test_speech_returns_mp3_for_a_signed_reply(client_for):
     _, call = fake.calls[0]
     assert call["voice"] == DEFAULT_TTS_VOICE and call["input"] == "הנה ההצעה שלי."
     assert "Hebrew" in call["instructions"]
+    assert fake.options == [{"timeout": 20, "max_retries": 0}]  # fail fast: no 60 s wait, no retry
 
 
 def test_hebrew_unit_abbreviations_are_spoken_as_words(client_for):
