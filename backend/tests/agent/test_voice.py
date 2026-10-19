@@ -69,15 +69,17 @@ def speech_body(text, language="en"):
     return {"text": text, "language": language, "signature": signing.sign_reply(get_signing_key(), text)}
 
 
-def test_transcribe_returns_the_text_without_a_language_hint(client_for):
+@pytest.mark.parametrize("language", ["he", "en"])
+def test_transcribe_uses_the_selected_language_as_the_hint(client_for, language):
     fake = FakeAudio(text="  תוסיף   מדף  ")
-    response = client_for(fake).post("/api/voice/transcribe?language=en", content=b"audio-bytes", headers=WEBM)
+    response = client_for(fake).post(f"/api/voice/transcribe?language={language}", content=b"audio-bytes", headers=WEBM)
     assert response.json() == {"success": True, "data": {"text": "תוסיף מדף"}}
     _, call = fake.calls[0]
     assert call == {
         "model": DEFAULT_TRANSCRIBE_MODEL,
         "file": ("speech.webm", b"audio-bytes", "audio/webm"),
-        "prompt": TRANSCRIBE_PROMPT,  # bilingual domain vocabulary, no language hint
+        "language": language,  # the chat's selected language
+        "prompt": TRANSCRIBE_PROMPT,  # bilingual domain vocabulary
     }
 
 

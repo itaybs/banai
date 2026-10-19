@@ -1,6 +1,6 @@
-// Chat panel strings in Hebrew and English. The agent replies only in the language a message is
-// written in; sending a message switches the chat to that language, so UI and replies always match.
-// The switch also sets the language for messages without letters (e.g. "240?").
+// Chat panel strings in Hebrew and English. The customer picks the language above the chat
+// (default עברית, remembered per browser); it is the only reply language, whatever a message is
+// written in, and the chat UI, notes, errors and read-aloud all follow it.
 
 export const LANGUAGES = Object.freeze(['he', 'en']);
 export const DEFAULT_LANGUAGE = 'he';
@@ -110,13 +110,6 @@ export const STRINGS = Object.freeze({
 });
 
 export const stringsFor = (language) => STRINGS[language] ?? STRINGS[DEFAULT_LANGUAGE];
-
-/** 'he' | 'en' | null (no letters). Hebrew wins in mixed text. Mirrors backend app/agent/language.py. */
-export function detectLanguage(text) {
-  if (/[א-ת]/.test(text)) return 'he';
-  if (/[A-Za-z]/.test(text)) return 'en';
-  return null;
-}
 
 function readStored(storage) {
   try {

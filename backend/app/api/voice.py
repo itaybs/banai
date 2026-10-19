@@ -96,8 +96,8 @@ async def transcribe(
         return localized(413, "AUDIO_TOO_LARGE", language)
     if not audio:
         return localized(422, "NO_SPEECH", language)
-    # No language hint: the customer may speak either language, and the chat switches to whichever
-    # the transcript is written in. `language` only localizes the error messages.
+    # `language` is the chat's selected language: the transcription hint and the error language.
+    # The reply follows it too, whatever language the customer speaks.
     model = _model(settings.openai_transcribe_model, DEFAULT_TRANSCRIBE_MODEL)
     try:
         # The OpenAI client is synchronous: run it off the event loop, or one slow upstream call
@@ -106,6 +106,7 @@ async def transcribe(
             client.audio.transcriptions.create,
             model=model,
             file=(f"speech.{AUDIO_TYPES[media_type]}", audio, media_type),
+            language=language,
             **({"prompt": TRANSCRIBE_PROMPT} if model in PROMPTABLE_MODELS else {}),
         )
     except Exception as exc:  # never echo upstream error text to the customer

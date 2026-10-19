@@ -43,7 +43,7 @@ class ChatRequest(BaseModel):
     messages: Annotated[list[ChatMessage], Field(min_length=1, max_length=MAX_HISTORY)]
     design: dict
     revision: Annotated[int, Field(ge=1)]
-    language: Language = "he"
+    language: Language  # the chat's selected language: required, and the only reply language
 
 
 class SignedProposal(BaseModel):

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, detect, reply_language
+from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY
 from app.agent.orchestrator import MAX_REPAIRS, fill_ids
 from app.agent.prompts import build_system_prompt, derived_facts
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PRODUCTION_CLAIM, PROPOSE, ProposeArgs
@@ -46,8 +46,8 @@ def make_client(monkeypatch):
     get_signing_key.cache_clear()
 
 
-def chat_body(text="Add a shelf at 100 cm on the left", design=None, revision=1):
-    return {"messages": [{"role": "user", "text": text}], "design": design or basic_wardrobe(), "revision": revision}
+def chat_body(text="Add a shelf at 100 cm on the left", design=None, revision=1, language="he"):
+    return {"messages": [{"role": "user", "text": text}], "design": design or basic_wardrobe(), "revision": revision, "language": language}
 
 
 def test_every_turn_must_use_a_tool_and_free_text_is_never_shown(make_client):
@@ -154,8 +154,8 @@ def test_invalid_ops_are_sent_back_for_repair(make_client):
 def test_gives_up_after_max_repairs(make_client):
     bad = completion(calls=[tool_call(PROPOSE, propose([OVERLAPPING_SHELF]))])
     fake = FakeClient(*[bad] * (MAX_REPAIRS + 1))
-    data = make_client(fake).post("/api/chat", json=chat_body()).json()["data"]
-    assert data == {"reply": FALLBACK_REPLY["en"], "replySignature": signing.sign_reply(get_signing_key(), data["reply"]), "proposal": None}  # the message was English
+    data = make_client(fake).post("/api/chat", json=chat_body(language="en")).json()["data"]
+    assert data == {"reply": FALLBACK_REPLY["en"], "replySignature": signing.sign_reply(get_signing_key(), data["reply"]), "proposal": None}  # English selected
     assert len(fake.requests) == MAX_REPAIRS + 1
 
 
@@ -417,35 +417,40 @@ def test_health_reports_whether_the_agent_is_configured(monkeypatch):
 
 # ---- reply language: the agent answers in the language the message is written in ----
 
-def test_detect_and_reply_language():
-    assert detect("תוסיף מדף") == "he"
-    assert detect("Add a shelf") == "en"
-    assert detect("תצבע ב-Walnut") == "he"  # Hebrew wins in mixed text
-    assert detect("240?") is None
-    history = [{"role": "user", "text": "שלום"}, {"role": "assistant", "text": "היי"}, {"role": "user", "text": "Add a shelf"}]
-    assert reply_language(history, "he") == "en"  # follows the latest customer message
-    assert reply_language([{"role": "user", "text": "240?"}], "en") == "en"  # no letters: the chat's choice
-    assert reply_language([{"role": "user", "text": "240?"}], "he") == "he"
-
-
-def test_hebrew_message_gets_hebrew_only(make_client):
+@pytest.mark.parametrize(("text", "language"), [
+    ("What's the weather today?", "he"),  # Hebrew selected + English message -> Hebrew
+    ("מה מזג האוויר היום?", "en"),  # English selected + Hebrew message -> English
+    ("תוסיף shelf בתא האמצעי", "en"),  # mixed text: still the selected language
+    ("240?", "en"), ("240?", "he"),  # no letters: the selected language
+])
+def test_the_selected_language_is_the_only_reply_language(make_client, text, language):
     fake = FakeClient(completion(calls=[tool_call(DECLINE, {})]))
-    data = make_client(fake).post("/api/chat", json={**chat_body("מה קורה"), "language": "en"}).json()["data"]
-    assert data["reply"] == OFF_TOPIC_REPLY["he"]
-    assert "in HEBREW" in fake.requests[0]["messages"][0]["content"].split("## RESPONSE LANGUAGE")[-1]
+    data = make_client(fake).post("/api/chat", json=chat_body(text, language=language)).json()["data"]
+    assert data["reply"] == OFF_TOPIC_REPLY[language]
+    expected = "in HEBREW" if language == "he" else "in ENGLISH"
+    assert expected in fake.requests[0]["messages"][0]["content"].split("## RESPONSE LANGUAGE")[-1]
 
 
-def test_english_message_gets_english_only(make_client):
-    fake = FakeClient(completion(calls=[tool_call(DECLINE, {})]))
-    data = make_client(fake).post("/api/chat", json={**chat_body("What's the weather today?"), "language": "he"}).json()["data"]
-    assert data["reply"] == OFF_TOPIC_REPLY["en"]
-    assert "in ENGLISH" in fake.requests[0]["messages"][0]["content"].split("## RESPONSE LANGUAGE")[-1]
+def test_switching_language_mid_conversation_keeps_the_history(make_client):
+    fake = FakeClient(completion(calls=[tool_call(CLARIFY, {"question": "Which compartment?"})]))
+    body = chat_body(language="en")
+    body["messages"] = [
+        {"role": "user", "text": "תוסיף מדף"}, {"role": "assistant", "text": "באיזה תא?"},
+        {"role": "user", "text": "בתא השמאלי"},  # the customer switched the chat to English before this one
+    ]
+    response = make_client(fake).post("/api/chat", json=body)
+    assert response.status_code == 200 and response.json()["data"]["reply"] == "Which compartment?"
+    request = fake.requests[0]["messages"]
+    assert "in ENGLISH" in request[0]["content"].split("## RESPONSE LANGUAGE")[-1]
+    assert [m["content"] for m in request[1:]] == ["תוסיף מדף", "באיזה תא?", "בתא השמאלי"]  # earlier messages unchanged
 
 
-def test_message_without_letters_uses_the_chat_language(make_client):
-    fake = FakeClient(completion(calls=[tool_call(DECLINE, {})]))
-    data = make_client(fake).post("/api/chat", json={**chat_body("240?"), "language": "en"}).json()["data"]
-    assert data["reply"] == OFF_TOPIC_REPLY["en"]
+def test_the_chat_language_is_required_and_validated(make_client):
+    client = make_client(FakeClient())
+    body = chat_body()
+    del body["language"]
+    assert client.post("/api/chat", json=body).status_code == 422
+    assert client.post("/api/chat", json=chat_body(language="fr")).status_code == 422
 
 
 def test_api_errors_follow_the_ui_language(monkeypatch):

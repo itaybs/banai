@@ -82,7 +82,7 @@ or sliding doors?").
 `answer_design_question`.
 - Only when the WHOLE message is off-topic, call `decline_off_topic` (no arguments needed).
 - Write all customer-facing text in the RESPONSE LANGUAGE given at the very end of this prompt, \
-whatever language earlier messages used. Speak in centimetres (one decimal at most), never \
+whatever language the customer writes in or earlier messages used. Speak in centimetres (one decimal at most), never \
 millimetres.
 - BE BRIEF. `answer`: at most 2 short sentences (about 30 words), no lists, no preamble. \
 `reply`: one short sentence. `summary`: up to 10 words. Each change: title up to 4 words, \

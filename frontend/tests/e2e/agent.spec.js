@@ -92,25 +92,30 @@ test.describe('AI designer (agent connected)', () => {
     await expect(page.locator('#chat-panel')).toHaveAttribute('dir', 'ltr');
   });
 
-  test('writing in the other language switches the chat to it, and the reply comes back in it', async ({ page }) => {
+  test('the selected language is the only reply language, whatever is written', async ({ page }) => {
     const calls = await mockAgent(page);
     await openDesigner(page);
-    await expect(page.getByTestId('chat-language-he')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('chat-language-he')).toHaveAttribute('aria-pressed', 'true'); // default עברית
+    await expect(page.getByTestId('chat-language-he')).toHaveText('עברית');
+    await expect(page.getByTestId('chat-language-en')).toHaveText('English');
 
+    // Hebrew selected + an English message: the chat stays Hebrew and asks for Hebrew.
     await page.getByTestId('chat-input').fill('make it shallower please');
     await page.getByTestId('chat-send').click();
-    await expect(page.getByTestId('chat-language-en')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('#chat-panel')).toHaveAttribute('dir', 'ltr');
-    await expect(page.getByTestId('chat-messages')).toContainText('Sure! Here is my proposal.');
-    await expect(page.getByTestId('chat-input')).toHaveValue(''); // sent, not left behind
-    expect(calls.chat[0].language).toBe('en');
+    await expect(page.locator('.chat__bubble--assistant:not(.chat__typing)').last()).toHaveText('אפשר! הנה ההצעה שלי.');
+    await expect(page.getByTestId('chat-language-he')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#chat-panel')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('chat-input')).toHaveValue('');
+    expect(calls.chat[0].language).toBe('he');
 
+    // English selected + a Hebrew message: English.
     await page.getByTestId('proposal-cancel').click();
+    await page.getByTestId('chat-language-en').click();
     await page.getByTestId('chat-input').fill('ותעשה אותו לבן');
     await page.getByTestId('chat-send').click();
-    await expect(page.getByTestId('chat-language-he')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.chat__bubble--assistant:not(.chat__typing)').last()).toHaveText('אפשר! הנה ההצעה שלי.');
-    expect(calls.chat[1].language).toBe('he');
+    await expect(page.locator('.chat__bubble--assistant:not(.chat__typing)').last()).toHaveText('Sure! Here is my proposal.');
+    await expect(page.getByTestId('chat-language-en')).toHaveAttribute('aria-pressed', 'true');
+    expect(calls.chat[1].language).toBe('en');
     expect(calls.chat).toHaveLength(2); // each message sent exactly once
   });
 

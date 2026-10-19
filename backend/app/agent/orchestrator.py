@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language, reply_language
+from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language
 from app.agent.prompts import build_system_prompt
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PROPOSE, TOOLS, AnswerArgs, ClarifyArgs, ProposeArgs
 from app.domain import ids
@@ -89,10 +89,9 @@ def _build_proposal(args: ProposeArgs, ops: list[dict], revision: int, base_hash
 
 
 def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, revision: int,
-             catalog: dict, signing_key: bytes, language: Language = "he") -> TurnResult:
-    """`design` must already be canonical (parsed and validated). The reply is in the language of the
-    latest customer message; `language` (the chat's choice) is the fallback when it has no letters."""
-    language = reply_language(messages, language)
+             catalog: dict, signing_key: bytes, language: Language) -> TurnResult:
+    """`design` must already be canonical (parsed and validated). `language` is the customer's choice
+    in the chat and the only reply language, whatever language the messages are written in."""
     conversation: list[dict] = [{"role": "system", "content": build_system_prompt(design, catalog, language)}, *_history(messages)]
     base_hash = signing.design_hash(design)
 

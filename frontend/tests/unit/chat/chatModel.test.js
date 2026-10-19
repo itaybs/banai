@@ -245,6 +245,39 @@ describe('chat model language', () => {
   });
 });
 
+describe('the selected language is the only reply language', () => {
+  it.each([
+    ['he', 'Add a shelf on the left'], // Hebrew selected + English message -> Hebrew
+    ['en', 'תוסיף מדף בצד שמאל'], // English selected + Hebrew message -> English
+  ])('sends %s whatever the message is written in', async (selected, text) => {
+    const agent = vi.fn(async () => ({ reply: 'ok', proposal: null }));
+    const model = createChatModel({ getRevision: () => 1, agent, getLanguage: () => selected });
+    model.send(text);
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    expect(agent.mock.calls[0][0].language).toBe(selected);
+    expect(model.getMessages().map((m) => m.language)).toEqual([selected, selected]);
+  });
+
+  it('switching mid-conversation: earlier messages stay, the pending proposal keeps working, the next reply follows', async () => {
+    let language = 'he';
+    const signed = { proposalId: 'prp_0123456789abcdef', baseRevision: 1, summary: 'מדף', changes: [{ title: 'מדף', detail: '100' }], ops: [], signature: 'x' };
+    const agent = vi.fn().mockResolvedValueOnce({ reply: 'אציע מדף.', proposal: signed }).mockResolvedValueOnce({ reply: 'Which one?', proposal: null });
+    const model = createChatModel({ getRevision: () => 1, agent, getLanguage: () => language });
+    model.send('תוסיף מדף');
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    language = 'en'; // the customer picks English
+    expect(model.getMessages().map((m) => [m.text, m.language])).toEqual([['תוסיף מדף', 'he'], ['אציע מדף.', 'he']]);
+    expect(model.getProposal()).toMatchObject({ id: signed.proposalId, language: 'he' }); // still there, in its own language
+    expect(model.getProposalStatus()).toBe('pending');
+    model.resolveProposal(STRINGS.en.applied, { applied: true }); // confirm still works after the switch
+    expect(model.getMessages().at(-1)).toMatchObject({ role: 'system', language: 'en', text: STRINGS.en.applied });
+    model.send('another one');
+    await vi.waitFor(() => expect(agent).toHaveBeenCalledTimes(2));
+    expect(agent.mock.calls[1][0].language).toBe('en');
+    expect(agent.mock.calls[1][0].messages.at(-2)).toEqual({ role: 'user', text: '[app] applied: מדף' });
+  });
+});
+
 describe('messages keep their language', () => {
   it('stamps every message and proposal with the language of its turn, even across a mid-request switch', async () => {
     let language = 'he';

@@ -1,16 +1,17 @@
-// Left column: header (with a Hebrew/English switch), a welcome with starter prompts, the
+// Left column: header with the עברית / English selector, a welcome with starter prompts, the
 // conversation, the proposal card and the composer. This panel never changes the design by
 // itself: the agent only proposes, and the host applies a proposal when the customer confirms it.
-// Switching the language rebuilds the panel's chrome; the conversation and the draft stay.
+// The selected language is the only reply language (nothing is detected from what is written).
+// Switching it rebuilds the panel's chrome; the conversation, the draft and a pending proposal stay.
 import { el } from '../editor/fields.js';
 import { icon } from '../ui/icons.js';
 import { COUNTER_FROM, MAX_MESSAGE_LENGTH, pasteOverflows } from './chatModel.js';
-import { createLanguage, detectLanguage, LANGUAGES, STRINGS, stringsFor } from './i18n.js';
+import { createLanguage, LANGUAGES, STRINGS, stringsFor } from './i18n.js';
 import { renderProposalCard } from './proposalCard.js';
 import { canRecord, createSpeaker, readAloudPreference, startRecording } from './voice.js';
 import { transcribe } from '../api/client.js';
 
-const LANGUAGE_NAMES = Object.freeze({ he: 'עב', en: 'EN' });
+const LANGUAGE_NAMES = Object.freeze({ he: 'עברית', en: 'English' });
 
 function languageSwitch(language, t) {
   const group = el('div', { className: 'lang-switch', attrs: { role: 'group', 'aria-label': t.switchLabel } });
@@ -117,6 +118,10 @@ export function mountChat(container, {
         ? el('span', { className: 'chat__status chat__status--online', text: t.online, attrs: { title: t.onlineTitle } })
         : el('span', { className: 'chat__status', text: t.comingSoon, attrs: { title: t.comingSoonTitle } }),
     ]);
+    const languageBar = el('div', { className: 'chat__language' }, [
+      el('span', { className: 'chat__language-label', text: t.switchLabel }),
+      languageSwitch(language, t),
+    ]);
 
     const input = el('textarea', { className: 'chat__input', attrs: { rows: '2', maxlength: String(MAX_MESSAGE_LENGTH), placeholder: (hintKey && t.composerHints[hintKey]) || t.placeholder, dir: 'auto', 'aria-label': t.inputLabel } });
     input.dataset.testid = 'chat-input';
@@ -182,16 +187,7 @@ export function mountChat(container, {
     const submit = () => {
       if (model.isBusy() || !input.value.trim()) return;
       voice.notice = null; // a new message clears an old mic/read-aloud notice
-      // Writing in Hebrew or English switches the chat to that language first, so the reply (and
-      // the UI) come back only in the language the customer wrote in.
-      const written = detectLanguage(input.value);
-      if (written && written !== language.get()) {
-        draft = input.value;
-        language.set(written); // rebuilds the panel; the draft is carried over
-        view.submit();
-        return;
-      }
-      if (model.send(input.value).ok) {
+      if (model.send(input.value).ok) { // replies come in the selected language, whatever is written
         input.value = '';
         draft = '';
         pasteCut = false;
@@ -209,9 +205,9 @@ export function mountChat(container, {
       }
     });
 
-    const controls = model.isConnected() ? [readAloudToggle(t), languageSwitch(language, t)] : [languageSwitch(language, t)];
+    const controls = model.isConnected() ? [readAloudToggle(t)] : [];
     const footerRow = el('div', { className: 'chat__footer-row' }, [hint, counter, el('div', { className: 'chat__footer-controls' }, controls)]);
-    container.replaceChildren(header, el('div', { className: 'chat__body' }, [welcome, list, proposalSlot]), el('div', { className: 'chat__footer' }, [composer, footerRow]));
+    container.replaceChildren(header, languageBar, el('div', { className: 'chat__body' }, [welcome, list, proposalSlot]), el('div', { className: 'chat__footer' }, [composer, footerRow]));
     view = { t, input, sendButton, composer, welcome, list, proposalSlot, typing, submit, hint, mic, renderedCount: 0, renderedProposalKey: null };
     showVoiceState();
   }
