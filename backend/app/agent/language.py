@@ -29,7 +29,9 @@ FALLBACK_REPLY: dict[Language, str] = {
 # It overrides the language of earlier messages in the conversation.
 INSTRUCTION: dict[Language, str] = {
     "he": "Write EVERYTHING customer-facing in HEBREW (reply, summary, change titles and details, "
-          "questions, answers), even if earlier messages were in English. Write centimetres as ס\"מ. Translate catalog names (Walnut -> אגוז, White -> לבן).",
+          "questions, answers), even if earlier messages were in English. Write centimetres as ס\"מ. Translate catalog names (Walnut -> אגוז, White -> לבן). "
+          "Use correct Hebrew grammatical gender (\"איזו מידה\", \"באיזה גובה\", \"באיזה תא\"). Address the customer in a "
+          "gender-neutral way and avoid slash forms like \"גובה/גובהים\".",
     "en": "Write EVERYTHING customer-facing in ENGLISH (reply, summary, change titles and details, "
           "questions, answers), even if earlier messages were in Hebrew. Write centimetres as cm.",
 }
