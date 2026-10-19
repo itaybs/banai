@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from app.agent.clearances import long_items_note, proposal_warning, with_note
 from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language
+from app.agent.units import millimetre_mistake
 from app.agent.prompts import build_system_prompt
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PROPOSE, TOOLS, AnswerArgs, ClarifyArgs, ProposeArgs
 from app.domain import ids
@@ -135,6 +136,9 @@ def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, rev
                 raise ValueError(f"unknown tool {call.function.name!r}")
             args = ProposeArgs.model_validate(arguments)
             ops = fill_ids(args.ops)
+            mistake = millimetre_mistake(ops, messages[-1]["text"])
+            if mistake:
+                raise ValueError(mistake)  # repaired like any invalid arguments
             proposed = apply_ops(design, ops, catalog)  # dry run on the engine's private copy
         except DomainError as error:
             conversation.append(_tool_message(call.id, {"error": error.to_dict(), "hint": "Fix the ops and call propose_changes again."}))

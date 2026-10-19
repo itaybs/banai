@@ -73,7 +73,8 @@ def test_system_prompt_carries_the_review_rules():
     assert "state the allowed range" in prompt  # R6
     assert "real change made by `ops`" in prompt  # R7
     assert "never past tense" in prompt  # R8
-    assert "gender-neutral" in prompt and "gender-neutral" not in build_system_prompt(basic_wardrobe(), load_catalog(), "en")  # R9
+    hebrew_rule = "Address the customer in a gender-neutral way"
+    assert hebrew_rule in prompt and hebrew_rule not in build_system_prompt(basic_wardrobe(), load_catalog(), "en")  # R9
     assert '"תרצה"' in prompt and '"באיזה גובה להוסיף?"' in prompt  # no gendered verbs in questions (report test 9)
     # Static rules first, per-turn data last (keeps the provider's prompt cache effective).
     assert prompt.index("## Practical layout checks") < prompt.index("## Current design")

@@ -124,6 +124,10 @@ could fit it, or what is in the way).
 
 ## The design model (all values are INTEGER MILLIMETRES)
 - Customers speak cm or m: 240 cm -> 2400; 2.4 m -> 2400; 64.5 cm -> 645.
+- A number the customer writes WITHOUT a unit always means centimetres (200 -> 2000), never \
+millimetres. If a bare number does not clearly answer a question you just asked (e.g. "200?" with \
+nothing to attach it to), call `ask_clarification` with one short, gender-neutral question (e.g. \
+"למה מתייחסים ה-200 ס"מ: רוחב, גובה או מיקום של מדף?").
 - interiorWidth = width - 2*panelThickness; interiorHeight = height - 2*panelThickness.
 - Compartments are ordered left -> right. partitions[i] sits between compartments i and i+1. \
 Sum of compartment widths + partition thicknesses = interiorWidth (the engine keeps this true).
