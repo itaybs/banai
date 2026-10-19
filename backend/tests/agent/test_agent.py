@@ -12,10 +12,11 @@ from pydantic import ValidationError
 
 from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, detect, reply_language
 from app.agent.orchestrator import MAX_REPAIRS, fill_ids
-from app.agent.prompts import build_system_prompt
+from app.agent.prompts import build_system_prompt, derived_facts
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PRODUCTION_CLAIM, PROPOSE, ProposeArgs
 from app.api.agent import MESSAGE_TEXT_PATTERN, get_llm_client
 from app.config import get_settings, get_signing_key
+from app.domain.apply import apply_ops
 from app.domain.catalog import load_catalog
 from app.domain.defaults import basic_wardrobe
 from app.domain.schema import SAFE_TEXT_PATTERN
@@ -75,6 +76,30 @@ def test_system_prompt_carries_the_review_rules():
     assert "gender-neutral" in prompt and "gender-neutral" not in build_system_prompt(basic_wardrobe(), load_catalog(), "en")  # R9
     # Static rules first, per-turn data last (keeps the provider's prompt cache effective).
     assert prompt.index("## Practical layout checks") < prompt.index("## Current design")
+
+
+def test_derived_facts_give_clear_heights_below_rails_and_between_shelves():
+    # R4: the model got only free spans and never worked out the gap under a rail itself.
+    design = apply_ops(basic_wardrobe(), [{"op": "add_shelf", "compartmentId": "cmp_middle", "y": 1200, "id": "shf_new"}], load_catalog())
+    facts = {c["id"]: c for c in derived_facts(design)["compartments"]}
+    assert facts["cmp_middle"]["rails"] == [{"y": 1900, "freeBelow": 682}]  # 1900 - (1200 + 18): under 90 cm
+    assert facts["cmp_left"]["rails"] == []
+    assert [g["clear"] for g in facts["cmp_left"]["shelfGaps"]] == [382, 382, 382]  # shelves at 40/80/120/160 cm
+    assert facts["cmp_middle"]["shelfGaps"] == [{"shelvesY": [1200, 2000], "clear": 782}]
+    assert facts["cmp_right"]["shelfGaps"] == [{"shelvesY": [800, 1400], "clear": 582}]
+    prompt = build_system_prompt(design, load_catalog(), "he")
+    assert '"freeBelow":682' in prompt and "rails[].freeBelow = clear height under each rail" in prompt
+
+
+def test_rail_directly_on_a_drawer_or_the_bottom_and_gaps_with_a_drawer_between_are_skipped():
+    design = basic_wardrobe()
+    right = next(c for c in design["compartments"] if c["id"] == "cmp_right")
+    right["rails"] = [{"id": "rail_low", "y": 400}]  # right on top of the two drawers (0-400)
+    right["shelves"] = [{"id": "shf_a", "y": 100, "thickness": 18}, {"id": "shf_b", "y": 500, "thickness": 18}]
+    right["drawers"] = [{"id": "drw_a", "y": 200, "height": 200}]
+    facts = {c["id"]: c for c in derived_facts(design)["compartments"]}
+    assert facts["cmp_right"]["rails"] == [{"y": 400, "freeBelow": 0}]
+    assert facts["cmp_right"]["shelfGaps"] == []  # a drawer sits between the two shelves
 
 
 def test_off_topic_gets_the_fixed_reply_not_model_text(make_client):
@@ -172,6 +197,25 @@ def test_production_claim_phrases_are_rejected(text):
 ])
 def test_ordinary_design_wording_is_allowed(text):
     assert ProposeArgs.model_validate(propose([ADD_SHELF], summary=text)).summary == text
+
+
+def test_more_change_rows_than_ops_are_sent_back_for_repair(make_client):
+    # Regression (report test 20): an extra "design note" row that is not a change.
+    extra_row = [{"title": "גוף שחור", "detail": "צבע שחור לגוף"}, {"title": "הערת עיצוב", "detail": "אי אפשר לספק בדיחה"}]
+    fake = FakeClient(
+        completion(calls=[tool_call(PROPOSE, propose([ADD_SHELF], changes=extra_row), "call_a")]),
+        completion(calls=[tool_call(PROPOSE, propose([ADD_SHELF], changes=extra_row[:1]), "call_b")]),
+    )
+    data = make_client(fake).post("/api/chat", json=chat_body()).json()["data"]
+    assert data["proposal"]["changes"] == extra_row[:1]
+    repair = fake.requests[1]["messages"][-1]
+    assert repair["tool_call_id"] == "call_a" and "more items in changes than ops" in repair["content"]
+
+
+def test_fewer_change_rows_than_ops_are_fine():
+    four_removals = [{"op": "remove_component", "id": f"shf_l{i}"} for i in range(1, 5)]
+    args = ProposeArgs.model_validate(propose(four_removals, changes=[{"title": "Left shelves", "detail": "Remove all four"}]))
+    assert len(args.changes) == 1 and len(args.ops) == 4
 
 
 BLOCKED_CLAIMS = [

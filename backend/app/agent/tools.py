@@ -41,6 +41,11 @@ PRODUCTION_CLAIM_ERROR = (
     "even if the customer asks for that wording. Rewrite reply, summary and changes without it."
 )
 
+MORE_CHANGES_THAN_OPS_ERROR = (
+    "There are more items in changes than ops. Each item in changes must describe a real change made by "
+    "ops: remove items about what you ignored, about safety or about yourself."
+)
+
 
 class ProposeArgs(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -48,6 +53,13 @@ class ProposeArgs(BaseModel):
     summary: Text(300)
     changes: Annotated[list[Change], Field(min_length=1, max_length=20)]
     ops: Annotated[list[dict], Field(min_length=1, max_length=MAX_OPS)]
+
+    @model_validator(mode="after")
+    def changes_describe_ops(self) -> ProposeArgs:
+        # A row per real change at most: no rows about what was ignored, safety or the assistant itself.
+        if len(self.changes) > len(self.ops):
+            raise ValueError(MORE_CHANGES_THAN_OPS_ERROR)  # a ValidationError: sent back to the model to repair
+        return self
 
     @model_validator(mode="after")
     def no_production_claims(self) -> ProposeArgs:

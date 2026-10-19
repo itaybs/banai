@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from types import SimpleNamespace
@@ -127,6 +128,26 @@ def test_upstream_errors_are_not_echoed(client_for):
     ):
         assert response.status_code == 502
         assert "secret" not in response.text
+
+
+class ProviderError(Exception):
+    def __init__(self, message, status_code=None, code=None):
+        super().__init__(message)
+        self.status_code, self.code = status_code, code
+
+
+def test_voice_failures_log_class_status_and_code_only(client_for, caplog):
+    fake = FakeAudio(error=ProviderError("Incorrect API key provided: sk-abc123", status_code=401, code="invalid_api_key"))
+    client = client_for(fake)
+    with caplog.at_level(logging.WARNING, logger="app.api.voice"):
+        client.post("/api/voice/transcribe?language=en", content=b"x", headers=WEBM)
+        client.post("/api/voice/speech", json=speech_body("Hello"))
+    assert [r.getMessage() for r in caplog.records if r.name == "app.api.voice"] == [
+        "transcription failed: ProviderError status=401 code=invalid_api_key",
+        "speech synthesis failed: ProviderError status=401 code=invalid_api_key",
+    ]
+    assert "sk-abc123" not in caplog.text and "Incorrect API key" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)  # no traceback (it would carry the message)
 
 
 def test_agent_disabled_is_503(client_for):

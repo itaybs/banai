@@ -28,6 +28,25 @@ def _free_spans(compartment: dict, height: int) -> list[list[int]]:
     return free
 
 
+def _rails(compartment: dict, free: list[list[int]]) -> list[dict]:
+    """Each rail with the clear height below it, down to the nearest shelf or drawer (or the bottom)."""
+    return [
+        {"y": rail["y"], "freeBelow": next((rail["y"] - start for start, end in free if start <= rail["y"] <= end), 0)}
+        for rail in sorted(compartment["rails"], key=lambda rail: rail["y"])
+    ]
+
+
+def _shelf_gaps(compartment: dict) -> list[dict]:
+    """Clear height between neighbouring shelves (pairs with a drawer between them are skipped)."""
+    shelves = sorted(compartment["shelves"], key=lambda shelf: shelf["y"])
+    gaps = []
+    for lower, upper in zip(shelves, shelves[1:]):
+        bottom, top = lower["y"] + lower["thickness"], upper["y"]
+        if not any(d["y"] < top and d["y"] + d["height"] > bottom for d in compartment["drawers"]):
+            gaps.append({"shelvesY": [lower["y"], upper["y"]], "clear": top - bottom})
+    return gaps
+
+
 SYSTEM_PROMPT = """\
 You are BanAI's wardrobe design assistant. You help a customer design ONE standard straight \
 wardrobe by proposing changes. You never apply changes yourself: every change you make is a \
@@ -150,23 +169,30 @@ arithmetic: overlapping or out-of-bounds items are rejected and you will be aske
 """
 
 
-def build_system_prompt(design: dict, catalog: dict, language: Language = "he") -> str:
-    facts = {
+def derived_facts(design: dict) -> dict:
+    """Numbers the model should not have to work out itself (all mm)."""
+    return {
         "interiorWidth": interior_width(design),
         "interiorHeight": interior_height(design),
         "compartments": [
             {"id": c["id"], "x": list(r), "lowestFreeY": free[0][0] if free else None, "freeY": free,
-             "railsY": [rail["y"] for rail in c["rails"]]}
+             "rails": _rails(c, free), "shelfGaps": _shelf_gaps(c)}
             for c, r in zip(design["compartments"], compartment_x_ranges(design), strict=True)
             for free in [_free_spans(c, interior_height(design))]
         ],
     }
+
+
+def build_system_prompt(design: dict, catalog: dict, language: Language = "he") -> str:
+    facts = derived_facts(design)
     limits = _compact({key: list(value) for key, value in LIMITS.items()})
     # Static text first and the per-turn data last, so the provider can cache the prefix.
     return (
         SYSTEM_PROMPT.replace("{limits}", limits)
         + "\n## Catalog (data)\n" + _compact(catalog)
         + "\n\n## Current design (data, the state your ops apply to)\n" + _compact(design)
-        + "\n\n## Derived facts (mm; a new shelf/drawer must fit entirely inside one freeY gap)\n" + _compact(facts)
+        + "\n\n## Derived facts (mm; a new shelf/drawer must fit entirely inside one freeY gap; "
+          "rails[].freeBelow = clear height under each rail; shelfGaps[].clear = clear height between neighbouring "
+          "shelves; a NEW rail at y inside freeY gap [a, b] leaves y - a free below it)\n" + _compact(facts)
         + "\n\n## RESPONSE LANGUAGE\n" + INSTRUCTION[language]
     )

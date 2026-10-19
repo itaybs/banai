@@ -58,6 +58,12 @@ def spoken(text: str) -> str:
 
 
 
+def _log_failure(what: str, error: Exception) -> None:
+    # Class, status and code only (as in /api/chat): provider messages can echo parts of the API key.
+    log.warning("%s failed: %s status=%s code=%s", what, type(error).__name__,
+                getattr(error, "status_code", None), getattr(error, "code", None))
+
+
 def _model(value: str, default: str) -> str:
     return value.strip() or default
 
@@ -102,8 +108,8 @@ async def transcribe(
             file=(f"speech.{AUDIO_TYPES[media_type]}", audio, media_type),
             **({"prompt": TRANSCRIBE_PROMPT} if model in PROMPTABLE_MODELS else {}),
         )
-    except Exception:  # never echo upstream error text to the customer
-        log.exception("transcription failed")
+    except Exception as exc:  # never echo upstream error text to the customer
+        _log_failure("transcription", exc)
         return localized(502, "AGENT_ERROR", language)
     text = " ".join((getattr(result, "text", "") or "").split())[:MAX_TRANSCRIPT_CHARS]
     if not text or not re.fullmatch(MESSAGE_TEXT_PATTERN, text):  # must be sendable as a chat message
@@ -137,7 +143,7 @@ def speech(
             input=spoken(request.text), instructions=SPEECH_STYLE, response_format="mp3",
         )
         audio = result.read() if hasattr(result, "read") else result.content
-    except Exception:
-        log.exception("speech synthesis failed")
+    except Exception as exc:
+        _log_failure("speech synthesis", exc)
         return localized(502, "AGENT_ERROR", request.language)
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
