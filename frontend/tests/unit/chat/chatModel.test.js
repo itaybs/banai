@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  AGENT_ERROR_MESSAGE, createChatModel, MAX_MESSAGE_LENGTH, NOT_CONNECTED_MESSAGE, proposalStatus, SUGGESTIONS,
+  AGENT_ERROR_MESSAGE, COUNTER_FROM, createChatModel, MAX_MESSAGE_LENGTH, NOT_CONNECTED_MESSAGE, pasteOverflows, proposalStatus,
+  SUGGESTIONS,
 } from '../../../src/chat/chatModel.js';
 import { STRINGS } from '../../../src/chat/i18n.js';
 
@@ -81,6 +82,23 @@ describe('chat model', () => {
   });
 });
 
+describe('composer limit', () => {
+  it('detects a paste that the 2000-character input would cut', () => {
+    expect(pasteOverflows(0, 0, MAX_MESSAGE_LENGTH)).toBe(false);
+    expect(pasteOverflows(0, 0, MAX_MESSAGE_LENGTH + 1)).toBe(true);
+    expect(pasteOverflows(1900, 0, 101)).toBe(true);
+    expect(pasteOverflows(1900, 500, 600)).toBe(false); // replaces the selected text
+  });
+
+  it('shows the counter only near the limit, in both languages', () => {
+    expect(COUNTER_FROM).toBeLessThan(MAX_MESSAGE_LENGTH);
+    expect(STRINGS.he.charCount(1850, MAX_MESSAGE_LENGTH)).toBe('1,850 / 2,000');
+    expect(STRINGS.en.charCount(2000, MAX_MESSAGE_LENGTH)).toBe('2,000 / 2,000');
+    expect(STRINGS.he.pasteTruncated(MAX_MESSAGE_LENGTH)).toContain('2,000');
+    expect(STRINGS.en.pasteTruncated(MAX_MESSAGE_LENGTH)).toContain('was cut');
+  });
+});
+
 describe('suggestions', () => {
   it('offers a few short, immutable starter prompts that fit the message limit', () => {
     expect(SUGGESTIONS.length).toBeGreaterThanOrEqual(3);
@@ -118,7 +136,7 @@ describe('chat model with a connected agent', () => {
     expect(model.getProposalStatus()).toBe('pending');
   });
 
-  it('keeps system notes out of the history sent to the agent', async () => {
+  it('tells the agent a proposal was cancelled with an [app] note, not the UI text', async () => {
     const agent = vi.fn(async () => ({ reply: 'ok', proposal: signed }));
     const model = createChatModel({ getRevision: () => 3, agent });
     model.send('first');
@@ -127,8 +145,30 @@ describe('chat model with a connected agent', () => {
     model.send('second');
     await vi.waitFor(() => expect(agent).toHaveBeenCalledTimes(2));
     expect(agent.mock.calls[1][0].messages).toEqual([
-      { role: 'user', text: 'first' }, { role: 'assistant', text: 'ok' }, { role: 'user', text: 'second' },
+      { role: 'user', text: 'first' }, { role: 'assistant', text: 'ok' },
+      { role: 'user', text: '[app] cancelled: Adds a shelf' }, { role: 'user', text: 'second' },
     ]);
+  });
+
+  it('tells the agent which proposals were applied; other notes stay UI-only', async () => {
+    // Regression: the agent claimed confirmed proposals were never confirmed (it was never told).
+    const agent = vi.fn(async () => ({ reply: 'ok', proposal: signed }));
+    const model = createChatModel({ getRevision: () => 3, agent });
+    model.send('first');
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    model.resolveProposal(STRINGS.he.applied, { applied: true });
+    model.send('second');
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    model.resolveProposal(STRINGS.he.notApplied); // a refused apply is not reported as applied
+    model.send('what did I confirm?');
+    await vi.waitFor(() => expect(agent).toHaveBeenCalledTimes(3));
+    expect(agent.mock.calls[2][0].messages).toEqual([
+      { role: 'user', text: 'first' }, { role: 'assistant', text: 'ok' },
+      { role: 'user', text: '[app] applied: Adds a shelf' },
+      { role: 'user', text: 'second' }, { role: 'assistant', text: 'ok' },
+      { role: 'user', text: 'what did I confirm?' },
+    ]);
+    expect(model.getMessages().filter((m) => m.role === 'system').map((m) => m.text)).toEqual([STRINGS.he.applied, STRINGS.he.notApplied]);
   });
 
   it('shows a friendly note when the agent fails, and recovers', async () => {
@@ -139,6 +179,28 @@ describe('chat model with a connected agent', () => {
     expect(model.getMessages().at(-1)).toMatchObject({ role: 'system', text: AGENT_ERROR_MESSAGE });
     model.send('again');
     await vi.waitFor(() => expect(model.getMessages().at(-1)).toMatchObject({ role: 'assistant', text: 'back' }));
+  });
+
+  it('drops a message the server refused (4xx) from later history, with a friendly note', async () => {
+    // Regression: a refused message stayed in the history, so every later request was refused too.
+    const refused = Object.assign(new Error('Request to /api/chat failed with status 422'), { status: 422 });
+    const agent = vi.fn().mockRejectedValueOnce(refused).mockResolvedValueOnce({ reply: 'ok', proposal: null });
+    const model = createChatModel({ getRevision: () => 1, agent });
+    model.send('👨‍👩‍👧 bad');
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    expect(model.getMessages().at(-1)).toMatchObject({ role: 'system', text: STRINGS.he.messageRejected });
+    expect(model.getMessages().map((m) => m.text)).not.toContain(refused.message);
+    model.send('good');
+    await vi.waitFor(() => expect(agent).toHaveBeenCalledTimes(2));
+    expect(agent.mock.calls[1][0].messages).toEqual([{ role: 'user', text: 'good' }]);
+  });
+
+  it('keeps the server message for non-4xx errors', async () => {
+    const unavailable = Object.assign(new Error('המעצב החכם לא זמין כרגע.'), { status: 502 });
+    const model = createChatModel({ getRevision: () => 1, agent: vi.fn().mockRejectedValueOnce(unavailable) });
+    model.send('hi');
+    await vi.waitFor(() => expect(model.isBusy()).toBe(false));
+    expect(model.getMessages().at(-1)).toMatchObject({ role: 'system', text: unavailable.message });
   });
 
   it('a new message drops an unconfirmed proposal', async () => {

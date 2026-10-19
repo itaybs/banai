@@ -80,7 +80,7 @@ async function boot() {
     try {
       const result = await applyProposal({ design, revision, proposal: proposal.signed, language: language.get() });
       store.replaceDesign(result.design, result.revision);
-      chatModel.resolveProposal(t().applied);
+      chatModel.resolveProposal(t().applied, { applied: true });
     } catch (error) {
       chatModel.resolveProposal(error?.code === 'STALE' ? t().stale : t().notApplied);
     } finally {

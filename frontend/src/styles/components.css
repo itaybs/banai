@@ -248,6 +248,8 @@
 /* Composer footer: keyboard hint on one side, the chat language switch on the other. */
 .chat__footer-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .chat__footer-row .chat__hint { margin: 0; }
+.chat__counter { flex: none; margin-inline-start: auto; color: var(--md-sys-color-on-surface-variant); font: var(--md-sys-typescale-label-small); font-variant-numeric: tabular-nums; }
+.chat__counter--full { color: var(--md-sys-color-error); font-weight: 600; }
 
 /* Voice: mic in the composer, read-aloud toggle in the footer. */
 .chat__mic { flex: none; color: var(--md-sys-color-primary); }

@@ -16,9 +16,16 @@ export const APPLIED_MESSAGE = STRINGS.he.applied;
 export const NOT_APPLIED_MESSAGE = STRINGS.he.notApplied;
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_HISTORY = 30; // mirrors the backend cap on messages per request
+export const COUNTER_FROM = 1800; // the composer shows "n / 2000" from here on
+
+/** True when pasting `pastedLength` characters over the selection would pass the message limit (the input cuts it). */
+export const pasteOverflows = (valueLength, selectionLength, pastedLength) => valueLength - selectionLength + pastedLength > MAX_MESSAGE_LENGTH;
 
 // Starter prompts shown before the first message (per language in i18n.js). Picking one only fills the composer.
 export const SUGGESTIONS = STRINGS.he.suggestions;
+
+/** The history note the model gets for a proposal's outcome, e.g. "[app] applied: Adds a shelf". */
+export const appNote = (outcome, summary) => (summary ? `[app] ${outcome}: ${summary}` : `[app] ${outcome}`);
 
 export function proposalStatus(proposal, currentRevision) {
   if (!proposal) return null;
@@ -51,23 +58,28 @@ export function createChatModel({ getRevision, agent = null, getLanguage = () =>
   let proposal = null;
   let busy = false;
   const messages = [];
+  const rejected = new Set(); // ids of customer messages the server refused (4xx): never resent
   const listeners = new Set();
   const notify = () => listeners.forEach((listener) => listener());
   const t = () => stringsFor(getLanguage());
   // Every message remembers the language it was written in, so switching the chat language later
   // never changes how earlier messages look (a Hebrew message stays Hebrew and right-to-left).
   // An agent reply also keeps its server signature, which read-aloud needs (/api/voice/speech).
-  const push = (role, text, language = getLanguage(), signature = null) => {
-    messages.push(Object.freeze({ id: nextId, role, text, language, ...(signature && { signature }) }));
+  // `agentNote` (system notes only) is what the model is told about the note, e.g. which proposal
+  // was applied; the note's own text is UI-only.
+  const push = (role, text, language = getLanguage(), signature = null, agentNote = null) => {
+    messages.push(Object.freeze({ id: nextId, role, text, language, ...(signature && { signature }), ...(agentNote && { agentNote }) }));
     nextId += 1;
   };
-  // Only real dialogue goes to the model; system notes (cancelled, applied...) are UI-only.
+  // The model gets the dialogue plus short "[app] applied/cancelled: <summary>" notes, so it knows
+  // which proposals were confirmed. Other system notes stay UI-only.
+  // A refused message stays visible but is left out, or every later request would be refused too.
   const history = () => messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter((m) => ((m.role === 'user' || m.role === 'assistant') && !rejected.has(m.id)) || m.agentNote)
     .slice(-MAX_HISTORY)
-    .map(({ role, text }) => ({ role, text }));
+    .map(({ role, text, agentNote }) => (agentNote ? { role: 'user', text: agentNote } : { role, text }));
 
-  async function ask() {
+  async function ask(messageId) {
     // The reply is written in the language chosen when the message was sent, even if the
     // customer switches language while the designer is still thinking.
     const language = getLanguage();
@@ -78,6 +90,11 @@ export function createChatModel({ getRevision, agent = null, getLanguage = () =>
       push('assistant', reply, language, replySignature);
       if (signed) proposal = fromServerProposal(signed, language);
     } catch (error) {
+      if (error?.status >= 400 && error.status < 500) {
+        rejected.add(messageId);
+        push('system', stringsFor(language).messageRejected, language);
+        return;
+      }
       push('system', error?.message && error.status ? error.message : stringsFor(language).agentError, language);
     } finally {
       busy = false;
@@ -105,6 +122,7 @@ export function createChatModel({ getRevision, agent = null, getLanguage = () =>
       if (!text) return { ok: false, reason: 'empty' };
       if (text.length > MAX_MESSAGE_LENGTH) return { ok: false, reason: 'too-long' };
       if (busy) return { ok: false, reason: 'busy' };
+      const messageId = nextId;
       push('user', text);
       if (!agent) {
         push('system', t().notConnected);
@@ -113,7 +131,7 @@ export function createChatModel({ getRevision, agent = null, getLanguage = () =>
       }
       // A new request supersedes an unconfirmed proposal.
       proposal = null;
-      ask();
+      ask(messageId);
       return { ok: true };
     },
 
@@ -126,16 +144,18 @@ export function createChatModel({ getRevision, agent = null, getLanguage = () =>
     /** Cancel never changes the design; it only drops the pending proposal. */
     cancelProposal() {
       if (!proposal) return false;
+      const { summary } = proposal;
       proposal = null;
-      push('system', t().cancelled);
+      push('system', t().cancelled, getLanguage(), null, appNote('cancelled', summary));
       notify();
       return true;
     },
 
-    /** Called after the host applied (or refused) the proposal. */
-    resolveProposal(message) {
+    /** Called after the host applied (`applied: true`) or refused the proposal. */
+    resolveProposal(message, { applied = false } = {}) {
+      const summary = proposal?.summary;
       proposal = null;
-      if (message) push('system', message);
+      if (message) push('system', message, getLanguage(), null, applied ? appNote('applied', summary) : null);
       notify();
     },
   };
