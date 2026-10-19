@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from types import SimpleNamespace
@@ -21,11 +22,15 @@ NO_SIGNATURE = "0" * 64
 
 class FakeAudio:
     def __init__(self, text="Add a shelf on the left", error=None, delay=0.0):
-        self.text, self.error, self.delay, self.calls = text, error, delay, []
+        self.text, self.error, self.delay, self.calls, self.options = text, error, delay, [], []
         self.audio = SimpleNamespace(
             transcriptions=SimpleNamespace(create=self._transcribe),
             speech=SimpleNamespace(create=self._speak),
         )
+
+    def with_options(self, **options):  # like OpenAI.with_options: same client, per-call options
+        self.options.append(options)
+        return self
 
     def _transcribe(self, **kwargs):
         self.calls.append(("transcribe", kwargs))
@@ -64,15 +69,17 @@ def speech_body(text, language="en"):
     return {"text": text, "language": language, "signature": signing.sign_reply(get_signing_key(), text)}
 
 
-def test_transcribe_returns_the_text_without_a_language_hint(client_for):
+@pytest.mark.parametrize("language", ["he", "en"])
+def test_transcribe_uses_the_selected_language_as_the_hint(client_for, language):
     fake = FakeAudio(text="  תוסיף   מדף  ")
-    response = client_for(fake).post("/api/voice/transcribe?language=en", content=b"audio-bytes", headers=WEBM)
+    response = client_for(fake).post(f"/api/voice/transcribe?language={language}", content=b"audio-bytes", headers=WEBM)
     assert response.json() == {"success": True, "data": {"text": "תוסיף מדף"}}
     _, call = fake.calls[0]
     assert call == {
         "model": DEFAULT_TRANSCRIBE_MODEL,
         "file": ("speech.webm", b"audio-bytes", "audio/webm"),
-        "prompt": TRANSCRIBE_PROMPT,  # bilingual domain vocabulary, no language hint
+        "language": language,  # the chat's selected language
+        "prompt": TRANSCRIBE_PROMPT,  # bilingual domain vocabulary
     }
 
 
@@ -125,6 +132,26 @@ def test_upstream_errors_are_not_echoed(client_for):
         assert "secret" not in response.text
 
 
+class ProviderError(Exception):
+    def __init__(self, message, status_code=None, code=None):
+        super().__init__(message)
+        self.status_code, self.code = status_code, code
+
+
+def test_voice_failures_log_class_status_and_code_only(client_for, caplog):
+    fake = FakeAudio(error=ProviderError("Incorrect API key provided: sk-abc123", status_code=401, code="invalid_api_key"))
+    client = client_for(fake)
+    with caplog.at_level(logging.WARNING, logger="app.api.voice"):
+        client.post("/api/voice/transcribe?language=en", content=b"x", headers=WEBM)
+        client.post("/api/voice/speech", json=speech_body("Hello"))
+    assert [r.getMessage() for r in caplog.records if r.name == "app.api.voice"] == [
+        "transcription failed: ProviderError status=401 code=invalid_api_key",
+        "speech synthesis failed: ProviderError status=401 code=invalid_api_key",
+    ]
+    assert "sk-abc123" not in caplog.text and "Incorrect API key" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)  # no traceback (it would carry the message)
+
+
 def test_agent_disabled_is_503(client_for):
     client = client_for(None)
     assert client.post("/api/voice/transcribe", content=b"x", headers=WEBM).status_code == 503
@@ -141,6 +168,7 @@ def test_speech_returns_mp3_for_a_signed_reply(client_for):
     _, call = fake.calls[0]
     assert call["voice"] == DEFAULT_TTS_VOICE and call["input"] == "הנה ההצעה שלי."
     assert "Hebrew" in call["instructions"]
+    assert fake.options == [{"timeout": 20, "max_retries": 0}]  # fail fast: no 60 s wait, no retry
 
 
 def test_hebrew_unit_abbreviations_are_spoken_as_words(client_for):

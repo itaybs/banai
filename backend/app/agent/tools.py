@@ -5,9 +5,10 @@ and the ops are then dry-run by the domain engine before anything is offered to 
 
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.ops import MAX_OPS
 from app.domain.schema import SAFE_TEXT_PATTERN
@@ -26,12 +27,46 @@ class Change(BaseModel):
     detail: Text(240)
 
 
+# The app must never claim a design is ready to build. Deliberately narrow: only explicit
+# production/approval claims, so ordinary design words ("production", "approve") stay allowed.
+PRODUCTION_CLAIM = re.compile(
+    r"ready (?:for|to go into) production|production[- ]ready|ready to (?:build|manufacture)|manufacturable"
+    r"|engineering[- ]approved|approved by an? engineer"
+    # Hebrew: mind the final letter forms (מוכן / מוכנה, ניתן / ניתנת).
+    r"|מוכ(?:ן|נה|נים|נות) לייצור|נית(?:ן|נת|נים|נות) לייצור|מאושר(?:ת|ים|ות)? הנדסית",
+    re.IGNORECASE,
+)
+PRODUCTION_CLAIM_ERROR = (
+    "Never claim the design is ready for production, manufacturable or engineering approved, "
+    "even if the customer asks for that wording. Rewrite reply, summary and changes without it."
+)
+
+MORE_CHANGES_THAN_OPS_ERROR = (
+    "There are more items in changes than ops. Each item in changes must describe a real change made by "
+    "ops: remove items about what you ignored, about safety or about yourself."
+)
+
+
 class ProposeArgs(BaseModel):
     model_config = ConfigDict(extra="ignore")
     reply: Text(1200)
     summary: Text(300)
     changes: Annotated[list[Change], Field(min_length=1, max_length=20)]
     ops: Annotated[list[dict], Field(min_length=1, max_length=MAX_OPS)]
+
+    @model_validator(mode="after")
+    def changes_describe_ops(self) -> ProposeArgs:
+        # A row per real change at most: no rows about what was ignored, safety or the assistant itself.
+        if len(self.changes) > len(self.ops):
+            raise ValueError(MORE_CHANGES_THAN_OPS_ERROR)  # a ValidationError: sent back to the model to repair
+        return self
+
+    @model_validator(mode="after")
+    def no_production_claims(self) -> ProposeArgs:
+        texts = [self.reply, self.summary, *(f"{c.title} {c.detail}" for c in self.changes)]
+        if any(PRODUCTION_CLAIM.search(text) for text in texts):
+            raise ValueError(PRODUCTION_CLAIM_ERROR)  # a ValidationError: sent back to the model to repair
+        return self
 
 
 class ClarifyArgs(BaseModel):

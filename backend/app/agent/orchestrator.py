@@ -15,7 +15,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language, reply_language
+from app.agent.clearances import long_items_note, proposal_warning, with_note
+from app.agent.language import FALLBACK_REPLY, OFF_TOPIC_REPLY, Language
+from app.agent.units import millimetre_mistake
 from app.agent.prompts import build_system_prompt
 from app.agent.tools import ANSWER, CLARIFY, DECLINE, PROPOSE, TOOLS, AnswerArgs, ClarifyArgs, ProposeArgs
 from app.domain import ids
@@ -89,10 +91,9 @@ def _build_proposal(args: ProposeArgs, ops: list[dict], revision: int, base_hash
 
 
 def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, revision: int,
-             catalog: dict, signing_key: bytes, language: Language = "he") -> TurnResult:
-    """`design` must already be canonical (parsed and validated). The reply is in the language of the
-    latest customer message; `language` (the chat's choice) is the fallback when it has no letters."""
-    language = reply_language(messages, language)
+             catalog: dict, signing_key: bytes, language: Language) -> TurnResult:
+    """`design` must already be canonical (parsed and validated). `language` is the customer's choice
+    in the chat and the only reply language, whatever language the messages are written in."""
     conversation: list[dict] = [{"role": "system", "content": build_system_prompt(design, catalog, language)}, *_history(messages)]
     base_hash = signing.design_hash(design)
 
@@ -129,12 +130,16 @@ def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, rev
             if call.function.name == CLARIFY:
                 return TurnResult(reply=ClarifyArgs.model_validate(arguments).question)
             if call.function.name == ANSWER:
-                return TurnResult(reply=AnswerArgs.model_validate(arguments).answer)
+                answer = AnswerArgs.model_validate(arguments).answer
+                return TurnResult(reply=with_note(answer, long_items_note(messages[-1]["text"], design, language)))
             if call.function.name != PROPOSE:
                 raise ValueError(f"unknown tool {call.function.name!r}")
             args = ProposeArgs.model_validate(arguments)
             ops = fill_ids(args.ops)
-            apply_ops(design, ops, catalog)  # dry run on the engine's private copy
+            mistake = millimetre_mistake(ops, messages[-1]["text"])
+            if mistake:
+                raise ValueError(mistake)  # repaired like any invalid arguments
+            proposed = apply_ops(design, ops, catalog)  # dry run on the engine's private copy
         except DomainError as error:
             conversation.append(_tool_message(call.id, {"error": error.to_dict(), "hint": "Fix the ops and call propose_changes again."}))
             continue
@@ -142,6 +147,8 @@ def run_turn(*, client: Any, model: str, messages: list[dict], design: dict, rev
             detail = error.errors(include_input=False, include_url=False) if isinstance(error, ValidationError) else str(error)
             conversation.append(_tool_message(call.id, {"error": "invalid tool arguments", "detail": detail}))
             continue
-        return TurnResult(reply=args.reply, proposal=_build_proposal(args, ops, revision, base_hash, signing_key))
+        # The clearance warning is written by code: the model does not use the computed numbers.
+        reply = with_note(args.reply, proposal_warning(design, proposed, ops, language))
+        return TurnResult(reply=reply, proposal=_build_proposal(args, ops, revision, base_hash, signing_key))
 
     return TurnResult(reply=FALLBACK_REPLY[language])

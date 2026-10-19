@@ -6,10 +6,11 @@ import { expect, openDesigner, test } from './fixtures.js';
 const ok = (data) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data }) });
 
 async function mockVoice(page) {
-  const calls = { transcribe: [], chat: [], speech: [] };
+  const calls = { transcribe: [], transcribeUrls: [], chat: [], speech: [] };
   await page.route('**/api/health', (route) => route.fulfill(ok({ status: 'ok', env: 'e2e', agent: true })));
   await page.route('**/api/voice/transcribe**', (route) => {
     calls.transcribe.push(route.request().headers()['content-type']);
+    calls.transcribeUrls.push(route.request().url());
     return route.fulfill(ok({ text: 'make it shallower' }));
   });
   await page.route('**/api/chat', (route) => {
@@ -57,7 +58,9 @@ test.describe('voice', () => {
     await expect(page.getByTestId('proposal-card')).toContainText('60.0 cm to 55.0 cm');
     expect(calls.transcribe[0]).toBe('audio/webm');
     expect(calls.chat[0].messages.at(-1)).toEqual({ role: 'user', text: 'make it shallower' });
-    expect(calls.chat[0].language).toBe('en'); // the transcript's language switched the chat
+    expect(new URL(calls.transcribeUrls[0]).searchParams.get('language')).toBe('he'); // the selected language is the hint
+    expect(calls.chat[0].language).toBe('he'); // English speech, Hebrew selected: the reply stays Hebrew
+    await expect(page.getByTestId('chat-language-he')).toHaveAttribute('aria-pressed', 'true');
     await expect(mic).toHaveAttribute('aria-pressed', 'false');
     expect(await depth(page)).toBe(600); // nothing applied by voice alone
 
@@ -78,11 +81,15 @@ test.describe('voice', () => {
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('chat-hint')).toContainText('AI-generated voice');
+    await expect(page.getByTestId('chat-hint')).toContainText('AI'); // the AI-voice notice, in the selected language
     await page.getByTestId('proposal-cancel').click();
     await page.getByTestId('chat-input').fill('and make it white');
     await page.getByTestId('chat-send').click();
     await expect.poll(() => calls.speech.length).toBe(1);
-    expect(calls.speech[0]).toEqual({ text: 'Sure! Here is my proposal.', language: 'en', signature: 'c'.repeat(64) });
+    expect(calls.speech[0]).toEqual({ text: 'Sure! Here is my proposal.', language: 'he', signature: 'c'.repeat(64) }); // the selected language
+
+    await page.reload(); // read-aloud is never restored: it starts off on every visit
+    await page.getByTestId('entry-basic').click();
+    await expect(page.getByTestId('chat-read-aloud')).toHaveAttribute('aria-pressed', 'false');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLanguage, DEFAULT_LANGUAGE, detectLanguage, LANGUAGES, STRINGS, stringsFor } from '../../../src/chat/i18n.js';
+import { createLanguage, DEFAULT_LANGUAGE, LANGUAGES, STRINGS, stringsFor } from '../../../src/chat/i18n.js';
 
 const memoryStorage = (initial = {}) => {
   const data = { ...initial };
@@ -43,14 +43,5 @@ describe('createLanguage', () => {
     expect(language.get()).toBe('he');
     language.set('en');
     expect(language.get()).toBe('en');
-  });
-});
-
-describe('detectLanguage', () => {
-  it('detects Hebrew, English, mixed (Hebrew wins) and no letters', () => {
-    expect(detectLanguage('תוסיף מדף')).toBe('he');
-    expect(detectLanguage('Add a shelf')).toBe('en');
-    expect(detectLanguage('תצבע ב-Walnut')).toBe('he');
-    expect(detectLanguage('240?')).toBeNull();
   });
 });

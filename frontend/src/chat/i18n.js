@@ -1,6 +1,6 @@
-// Chat panel strings in Hebrew and English. The agent replies only in the language a message is
-// written in; sending a message switches the chat to that language, so UI and replies always match.
-// The switch also sets the language for messages without letters (e.g. "240?").
+// Chat panel strings in Hebrew and English. The customer picks the language above the chat
+// (default עברית, remembered per browser); it is the only reply language, whatever a message is
+// written in, and the chat UI, notes, errors and read-aloud all follow it.
 
 export const LANGUAGES = Object.freeze(['he', 'en']);
 export const DEFAULT_LANGUAGE = 'he';
@@ -28,6 +28,8 @@ export const STRINGS = Object.freeze({
     readAloud: 'הקראת תשובות (קול שנוצר ב-AI)',
     readAloudOn: 'התשובות יוקראו בקול שנוצר ב-AI.',
     hint: 'Enter לשליחה · Shift+Enter לשורה חדשה',
+    charCount: (n, max) => `${n.toLocaleString('he-IL')} / ${max.toLocaleString('he-IL')}`,
+    pasteTruncated: (max) => `הטקסט שהודבק ארוך מ-${max.toLocaleString('he-IL')} תווים ונחתך. כדאי לקצר אותו.`,
     welcomeLabel: 'בואו נתחיל',
     welcomeTitle: 'מה נעצב היום?',
     welcomeText: 'תאר את הארון במילים שלך, ואני אהפוך את זה להצעה שתאשר לפני שמשהו משתנה.',
@@ -46,6 +48,7 @@ export const STRINGS = Object.freeze({
     notConnected: 'המעצב החכם עדיין לא מחובר. אפשר לעצב ידנית בפאנל המאפיינים.',
     stale: 'העיצוב השתנה. בקש מהמעצב הצעה חדשה.',
     agentError: 'המעצב לא הצליח לענות כרגע. נסה שוב בעוד רגע.',
+    messageRejected: 'לא הצלחתי לשלוח את ההודעה הזו. אולי יש בה תווים שאינם נתמכים. נסה לנסח אותה מחדש.',
     applied: 'השינויים הוחלו. העיצוב שלך עודכן.',
     notApplied: 'לא ניתן היה להחיל את ההצעה. לא בוצע שום שינוי.',
     cancelled: 'ההצעה בוטלה. לא בוצע שום שינוי.',
@@ -75,6 +78,8 @@ export const STRINGS = Object.freeze({
     readAloud: 'Read replies aloud (AI-generated voice)',
     readAloudOn: 'Replies will be read aloud in an AI-generated voice.',
     hint: 'Enter to send · Shift+Enter for a new line',
+    charCount: (n, max) => `${n.toLocaleString('en-US')} / ${max.toLocaleString('en-US')}`,
+    pasteTruncated: (max) => `The pasted text was longer than ${max.toLocaleString('en-US')} characters and was cut. Try shortening it.`,
     welcomeLabel: 'Get started',
     welcomeTitle: 'What shall we design today?',
     welcomeText: "Describe your wardrobe in your own words. I'll turn it into a proposal you confirm before anything changes.",
@@ -93,6 +98,7 @@ export const STRINGS = Object.freeze({
     notConnected: "The AI designer isn't connected yet. You can design manually in the Properties panel.",
     stale: 'Design changed. Ask the designer to re-propose.',
     agentError: "The designer couldn't answer just now. Please try again in a moment.",
+    messageRejected: "I couldn't send that message. It may contain unsupported characters. Please try rephrasing it.",
     applied: 'Applied. Your design has been updated.',
     notApplied: 'The proposal could not be applied. Nothing was changed.',
     cancelled: 'Proposal cancelled. No changes were made.',
@@ -104,13 +110,6 @@ export const STRINGS = Object.freeze({
 });
 
 export const stringsFor = (language) => STRINGS[language] ?? STRINGS[DEFAULT_LANGUAGE];
-
-/** 'he' | 'en' | null (no letters). Hebrew wins in mixed text. Mirrors backend app/agent/language.py. */
-export function detectLanguage(text) {
-  if (/[א-ת]/.test(text)) return 'he';
-  if (/[A-Za-z]/.test(text)) return 'en';
-  return null;
-}
 
 function readStored(storage) {
   try {

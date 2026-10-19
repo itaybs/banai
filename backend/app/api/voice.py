@@ -31,6 +31,7 @@ DEFAULT_TTS_VOICE = "marin"
 MAX_AUDIO_BYTES = 1_000_000
 MAX_TRANSCRIPT_CHARS = 2000  # the chat message limit
 MAX_SPEECH_CHARS = 1000
+SPEECH_TIMEOUT_SECONDS = 20
 AUDIO_TYPES = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "mp4", "audio/wav": "wav", "audio/mpeg": "mp3"}
 # Measured on real Hebrew audio (2026-10-16): English instructions that name Hebrew speak it most
 # clearly; instructions written in Hebrew made the speech worse.
@@ -55,6 +56,12 @@ def spoken(text: str) -> str:
         text = text.replace(short, word)
     return text
 
+
+
+def _log_failure(what: str, error: Exception) -> None:
+    # Class, status and code only (as in /api/chat): provider messages can echo parts of the API key.
+    log.warning("%s failed: %s status=%s code=%s", what, type(error).__name__,
+                getattr(error, "status_code", None), getattr(error, "code", None))
 
 
 def _model(value: str, default: str) -> str:
@@ -89,8 +96,8 @@ async def transcribe(
         return localized(413, "AUDIO_TOO_LARGE", language)
     if not audio:
         return localized(422, "NO_SPEECH", language)
-    # No language hint: the customer may speak either language, and the chat switches to whichever
-    # the transcript is written in. `language` only localizes the error messages.
+    # `language` is the chat's selected language: the transcription hint and the error language.
+    # The reply follows it too, whatever language the customer speaks.
     model = _model(settings.openai_transcribe_model, DEFAULT_TRANSCRIBE_MODEL)
     try:
         # The OpenAI client is synchronous: run it off the event loop, or one slow upstream call
@@ -99,10 +106,11 @@ async def transcribe(
             client.audio.transcriptions.create,
             model=model,
             file=(f"speech.{AUDIO_TYPES[media_type]}", audio, media_type),
+            language=language,
             **({"prompt": TRANSCRIBE_PROMPT} if model in PROMPTABLE_MODELS else {}),
         )
-    except Exception:  # never echo upstream error text to the customer
-        log.exception("transcription failed")
+    except Exception as exc:  # never echo upstream error text to the customer
+        _log_failure("transcription", exc)
         return localized(502, "AGENT_ERROR", language)
     text = " ".join((getattr(result, "text", "") or "").split())[:MAX_TRANSCRIPT_CHARS]
     if not text or not re.fullmatch(MESSAGE_TEXT_PATTERN, text):  # must be sendable as a chat message
@@ -129,13 +137,14 @@ def speech(
     if not signing.verify_reply(get_signing_key(), request.signature, request.text):
         return localized(403, "BAD_REPLY_SIGNATURE", request.language)
     try:
-        result = client.audio.speech.create(
+        # A reply read aloud late is useless: fail fast instead of the client's 60 s + retry.
+        result = client.with_options(timeout=SPEECH_TIMEOUT_SECONDS, max_retries=0).audio.speech.create(
             model=_model(settings.openai_tts_model, DEFAULT_TTS_MODEL),
             voice=_model(settings.openai_tts_voice, DEFAULT_TTS_VOICE),
             input=spoken(request.text), instructions=SPEECH_STYLE, response_format="mp3",
         )
         audio = result.read() if hasattr(result, "read") else result.content
-    except Exception:
-        log.exception("speech synthesis failed")
+    except Exception as exc:
+        _log_failure("speech synthesis", exc)
         return localized(502, "AGENT_ERROR", request.language)
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})

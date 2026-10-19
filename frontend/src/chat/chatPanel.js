@@ -1,16 +1,17 @@
-// Left column: header (with a Hebrew/English switch), a welcome with starter prompts, the
+// Left column: header with the עברית / English selector, a welcome with starter prompts, the
 // conversation, the proposal card and the composer. This panel never changes the design by
 // itself: the agent only proposes, and the host applies a proposal when the customer confirms it.
-// Switching the language rebuilds the panel's chrome; the conversation and the draft stay.
+// The selected language is the only reply language (nothing is detected from what is written).
+// Switching it rebuilds the panel's chrome; the conversation, the draft and a pending proposal stay.
 import { el } from '../editor/fields.js';
 import { icon } from '../ui/icons.js';
-import { MAX_MESSAGE_LENGTH } from './chatModel.js';
-import { createLanguage, detectLanguage, LANGUAGES, STRINGS, stringsFor } from './i18n.js';
+import { COUNTER_FROM, MAX_MESSAGE_LENGTH, pasteOverflows } from './chatModel.js';
+import { createLanguage, LANGUAGES, STRINGS, stringsFor } from './i18n.js';
 import { renderProposalCard } from './proposalCard.js';
 import { canRecord, createSpeaker, readAloudPreference, startRecording } from './voice.js';
 import { transcribe } from '../api/client.js';
 
-const LANGUAGE_NAMES = Object.freeze({ he: 'עב', en: 'EN' });
+const LANGUAGE_NAMES = Object.freeze({ he: 'עברית', en: 'English' });
 
 function languageSwitch(language, t) {
   const group = el('div', { className: 'lang-switch', attrs: { role: 'group', 'aria-label': t.switchLabel } });
@@ -37,11 +38,12 @@ export function mountChat(container, {
   let view = null;
   // Voice state outlives a rebuild (language switch). status: null | 'recording' | 'transcribing'.
   const voice = { recording: null, status: null, notice: null };
+  let pasteCut = false; // the last paste was cut at the message limit (shown in the hint until fixed)
   let spokenCount = model.getMessages().length; // replies already present are never read aloud
 
   const showVoiceState = () => {
     const { t, hint, mic } = view;
-    hint.textContent = voice.notice ?? (voice.status ? t[voice.status] : t.hint);
+    hint.textContent = voice.notice ?? (voice.status ? t[voice.status] : (pasteCut ? t.pasteTruncated(MAX_MESSAGE_LENGTH) : t.hint));
     if (!mic) return;
     const recording = voice.status === 'recording';
     mic.classList.toggle('chat__mic--recording', recording);
@@ -116,11 +118,34 @@ export function mountChat(container, {
         ? el('span', { className: 'chat__status chat__status--online', text: t.online, attrs: { title: t.onlineTitle } })
         : el('span', { className: 'chat__status', text: t.comingSoon, attrs: { title: t.comingSoonTitle } }),
     ]);
+    const languageBar = el('div', { className: 'chat__language' }, [
+      el('span', { className: 'chat__language-label', text: t.switchLabel }),
+      languageSwitch(language, t),
+    ]);
 
     const input = el('textarea', { className: 'chat__input', attrs: { rows: '2', maxlength: String(MAX_MESSAGE_LENGTH), placeholder: (hintKey && t.composerHints[hintKey]) || t.placeholder, dir: 'auto', 'aria-label': t.inputLabel } });
     input.dataset.testid = 'chat-input';
     input.value = draft;
-    input.addEventListener('input', () => { draft = input.value; });
+    // Near the limit a counter appears; the input itself cuts anything longer (maxlength).
+    const counter = el('span', { className: 'chat__counter', attrs: { 'aria-live': 'polite' } });
+    counter.dataset.testid = 'chat-counter';
+    const updateCounter = () => {
+      const length = input.value.length;
+      counter.hidden = length < COUNTER_FROM;
+      counter.textContent = t.charCount(length, MAX_MESSAGE_LENGTH);
+      counter.classList.toggle('chat__counter--full', length >= MAX_MESSAGE_LENGTH);
+    };
+    updateCounter();
+    input.addEventListener('input', () => {
+      draft = input.value;
+      if (pasteCut && input.value.length < MAX_MESSAGE_LENGTH) pasteCut = false;
+      updateCounter();
+      showVoiceState();
+    });
+    input.addEventListener('paste', (event) => {
+      const pasted = event.clipboardData?.getData('text') ?? '';
+      pasteCut = pasteOverflows(input.value.length, input.selectionEnd - input.selectionStart, pasted.length);
+    });
     const sendButton = el('button', { className: 'icon-btn icon-btn--filled chat__send', attrs: { type: 'submit', 'aria-label': t.send } }, [icon('send')]);
     sendButton.dataset.testid = 'chat-send';
     const voiceReady = model.isConnected() && canRecord();
@@ -162,18 +187,11 @@ export function mountChat(container, {
     const submit = () => {
       if (model.isBusy() || !input.value.trim()) return;
       voice.notice = null; // a new message clears an old mic/read-aloud notice
-      // Writing in Hebrew or English switches the chat to that language first, so the reply (and
-      // the UI) come back only in the language the customer wrote in.
-      const written = detectLanguage(input.value);
-      if (written && written !== language.get()) {
-        draft = input.value;
-        language.set(written); // rebuilds the panel; the draft is carried over
-        view.submit();
-        return;
-      }
-      if (model.send(input.value).ok) {
+      if (model.send(input.value).ok) { // replies come in the selected language, whatever is written
         input.value = '';
         draft = '';
+        pasteCut = false;
+        updateCounter();
       }
     };
     composer.addEventListener('submit', (event) => {
@@ -187,9 +205,9 @@ export function mountChat(container, {
       }
     });
 
-    const controls = model.isConnected() ? [readAloudToggle(t), languageSwitch(language, t)] : [languageSwitch(language, t)];
-    const footerRow = el('div', { className: 'chat__footer-row' }, [hint, el('div', { className: 'chat__footer-controls' }, controls)]);
-    container.replaceChildren(header, el('div', { className: 'chat__body' }, [welcome, list, proposalSlot]), el('div', { className: 'chat__footer' }, [composer, footerRow]));
+    const controls = model.isConnected() ? [readAloudToggle(t)] : [];
+    const footerRow = el('div', { className: 'chat__footer-row' }, [hint, counter, el('div', { className: 'chat__footer-controls' }, controls)]);
+    container.replaceChildren(header, languageBar, el('div', { className: 'chat__body' }, [welcome, list, proposalSlot]), el('div', { className: 'chat__footer' }, [composer, footerRow]));
     view = { t, input, sendButton, composer, welcome, list, proposalSlot, typing, submit, hint, mic, renderedCount: 0, renderedProposalKey: null };
     showVoiceState();
   }

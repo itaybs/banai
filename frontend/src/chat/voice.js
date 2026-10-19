@@ -72,23 +72,22 @@ export function createSpeaker({ fetchImpl = fetch, AudioImpl = globalThis.Audio,
   };
 }
 
-/** The read-aloud preference, remembered per browser (best effort). Off by default. */
+/**
+ * Read-aloud: OFF on every visit, and on only after the customer turns it on (it is never restored).
+ * A saved "on" from older versions kept it on in later sessions after one stray click, so the old
+ * stored value is removed.
+ */
 export function readAloudPreference(storage = globalThis.localStorage) {
   let on = false;
   try {
-    on = storage?.getItem(READ_ALOUD_KEY) === 'on';
+    storage?.removeItem(READ_ALOUD_KEY);
   } catch {
-    // blocked storage: default off
+    // blocked storage: nothing was saved
   }
   return {
     get: () => on,
     set(next) {
       on = Boolean(next);
-      try {
-        storage?.setItem(READ_ALOUD_KEY, on ? 'on' : 'off');
-      } catch {
-        // not persisted; applies for this visit
-      }
     },
   };
 }
