@@ -87,5 +87,9 @@ test.describe('voice', () => {
     await page.getByTestId('chat-send').click();
     await expect.poll(() => calls.speech.length).toBe(1);
     expect(calls.speech[0]).toEqual({ text: 'Sure! Here is my proposal.', language: 'he', signature: 'c'.repeat(64) }); // the selected language
+
+    await page.reload(); // read-aloud is never restored: it starts off on every visit
+    await page.getByTestId('entry-basic').click();
+    await expect(page.getByTestId('chat-read-aloud')).toHaveAttribute('aria-pressed', 'false');
   });
 });

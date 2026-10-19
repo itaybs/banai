@@ -103,17 +103,30 @@ describe('createSpeaker', () => {
 });
 
 describe('readAloudPreference', () => {
-  it('is off by default and remembered', () => {
-    const store = new Map();
-    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const memory = (initial = {}) => {
+    const store = new Map(Object.entries(initial));
+    return { store, getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  };
+
+  it('is off on every visit and turns on only when set', () => {
+    const storage = memory();
+    const pref = readAloudPreference(storage);
+    expect(pref.get()).toBe(false);
+    pref.set(true); // the customer clicked the toggle
+    expect(pref.get()).toBe(true);
+    expect(readAloudPreference(storage).get()).toBe(false); // the next visit starts off again
+  });
+
+  it('ignores and clears an old saved "on" (it kept read-aloud on in later sessions)', () => {
+    const storage = memory({ 'banai.chat.readAloud': 'on' });
     expect(readAloudPreference(storage).get()).toBe(false);
-    readAloudPreference(storage).set(true);
-    expect(readAloudPreference(storage).get()).toBe(true);
+    expect(storage.store.has('banai.chat.readAloud')).toBe(false);
   });
 
   it('survives blocked storage', () => {
-    const storage = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
-    const pref = readAloudPreference(storage);
+    const blocked = () => { throw new Error('blocked'); };
+    const pref = readAloudPreference({ getItem: blocked, setItem: blocked, removeItem: blocked });
+    expect(pref.get()).toBe(false);
     pref.set(true);
     expect(pref.get()).toBe(true);
   });
