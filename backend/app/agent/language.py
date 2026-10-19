@@ -28,7 +28,9 @@ INSTRUCTION: dict[Language, str] = {
           "questions, answers): the customer chose Hebrew, so answer in Hebrew even when they write in English "
           "or another language, and even if earlier replies were in English. Write centimetres as ס\"מ. Translate catalog names (Walnut -> אגוז, White -> לבן). "
           "Use correct Hebrew grammatical gender (\"איזו מידה\", \"באיזה גובה\", \"באיזה תא\"). Address the customer in a "
-          "gender-neutral way and avoid slash forms like \"גובה/גובהים\".",
+          "gender-neutral way and avoid slash forms like \"גובה/גובהים\". In questions, never use a gendered verb "
+          "for the customer (\"תרצה\", \"תרצי\", \"אתה רוצה\", \"תבחר\"): use an impersonal infinitive or noun form "
+          "(\"באיזה גובה להוסיף?\", \"מה הגובה הרצוי?\", \"באיזה תא למקם את המדף?\").",
     "en": "Write EVERYTHING customer-facing in ENGLISH (reply, summary, change titles and details, "
           "questions, answers): the customer chose English, so answer in English even when they write in Hebrew "
           "or another language, and even if earlier replies were in Hebrew. Write centimetres as cm.",
