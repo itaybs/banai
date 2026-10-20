@@ -15,6 +15,7 @@ import { mountChat } from './chat/chatPanel.js';
 import { mountStartScreen } from './entry/startScreen.js';
 import { createSaveDialog } from './share/saveDialog.js';
 import { createRenderDialog } from './render/renderDialog.js';
+import { createSpecDialog } from './spec/specDialog.js';
 import { createLogo } from './ui/logo.js';
 import { installRipple } from './ui/ripple.js';
 
@@ -87,7 +88,13 @@ async function boot() {
       applying = false;
     }
   };
-  const chat = mountChat(document.getElementById('chat-panel'), { model: chatModel, onConfirm: confirmProposal, language });
+  // The design summary PDF always uses the committed design and revision (a proposal only counts once confirmed).
+  const spec = createSpecDialog({
+    getState: () => { const { design, revision } = store.getState(); return { design, revision }; },
+    getLanguage: language.get,
+    captureFront: () => viewer.captureFront(),
+  });
+  const chat = mountChat(document.getElementById('chat-panel'), { model: chatModel, onConfirm: confirmProposal, onSpec: spec.open, language });
   // A manual edit changes the revision, which may turn a pending proposal stale.
   store.subscribe(() => chat.refresh());
 
