@@ -76,6 +76,9 @@ MESSAGES: dict[str, dict[str, str]] = {
     "AUDIO_TOO_LARGE": {"he": "ההקלטה ארוכה מדי.", "en": "The recording is too long."},
     "BAD_REPLY_SIGNATURE": {"he": "אפשר להקריא רק תשובות של המעצב.", "en": "Only the designer's own replies can be read aloud."},
     "STALE": {"he": "העיצוב השתנה אחרי שההצעה נוצרה. בקש מהמעצב הצעה חדשה.", "en": "The design changed after this proposal was made. Ask the designer to re-propose."},
+    "IMAGE_INVALID": {"he": "לא ניתן היה להשתמש בתמונת הארון. אפשר לנסות שוב.", "en": "The wardrobe image could not be used. Please try again."},
+    "TEXT_CLAIM": {"he": "אי אפשר לכתוב בסיכום שהעיצוב מוכן לייצור או מאושר. נא לנסח מחדש.",
+                   "en": "The summary cannot say the design is ready for production or approved. Please rephrase."},
 }
 
 

@@ -36,6 +36,7 @@ BanAI is an MVP AI wardrobe designer for standard straight wardrobes only. Three
 - **Phased delivery.** Work proceeds Phase 1 → 10 (`docs/architecture.md` §10a). After each phase, stop, report (what was implemented, files changed, real test output, known issues, next step), and wait for the user's approval. Never roll into the next phase on your own.
 - **Branches.** All work lands on `dev`, which Railway auto-deploys to the `dev` environment. Pushing or merging to `main` deploys **production** and needs explicit user approval.
 - **Excluded features (do not build):** pricing, quotes, orders, accounts or registration, dashboards, manufacturing/CNC export, feasibility rules, room design, image uploads, mobile-first layout, drag-and-drop geometry, and any AI change applied without approval. The app must never claim a design is manufacturable.
+  - **Exception (approved 2026-10-20):** a **design summary PDF** for the customer to send to a carpenter. It is a visual design draft, not a manufacturing file: no cut lists, board sizes, hardware, prices or budget. It always carries the "not a manufacturing drawing, verify on site" disclaimer.
 - **Mandatory stack.**
   - Frontend: vanilla JS ES modules + Three.js, bundled with Vite. **No React, Vue, or R3F.**
   - Backend: FastAPI + Pydantic.

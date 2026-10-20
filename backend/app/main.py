@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent, health, reference, voice
+from app.api import agent, health, reference, spec, voice
 from app.config import get_settings
 
 
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(reference.router)
     app.include_router(agent.router)
     app.include_router(voice.router)
+    app.include_router(spec.router)
     return app
 
 
