@@ -82,6 +82,14 @@ Revision and persistence metadata (`revision`, `designId`) stay **outside** the 
 6. **Cancel** discards the proposal on the client only, and a "cancelled" note goes into the chat history.
 7. Any manual edit made while a proposal is pending bumps the revision. The card then shows "design changed – ask agent to re-propose".
 
+### 5b. Design summary PDF for the carpenter (approved 2026-10-20)
+"Manufacturing exports" are excluded, so this is framed as a **design summary**, not a manufacturing file.
+- **Trigger:** the customer presses "סיכום לנגר / Summary for the carpenter" (disabled while a proposal is pending). Optional closing questions: intended use, installation location, timeline, special requests, and a name to show. There is no budget question (pricing is excluded).
+- **Data:** the confirmed design and revision from the app, re-validated by the backend engine. Every number comes from the design and the code (facts, clearances), never from model text. The model writes one short summary paragraph only, checked by the production-claim guard; without it the PDF is still produced.
+- **PDF:** `POST /api/spec/pdf`, rendered on the server with fpdf2 (HarfBuzz shaping, right-to-left text) and an embedded Noto Sans Hebrew font, in the chat's selected language. It always carries the disclaimer: a visual design draft, not a manufacturing drawing, all measurements to be verified on site. Nothing is stored; no personal data except the optional name.
+- **Delivery:** the device share sheet (Web Share API with a file) where supported, otherwise a download. The app does not send email.
+- Until Phase 7 (persistence) exists, the PDF uses the in-app confirmed design; afterwards it loads the saved design by id.
+
 ### 5a. Voice (chained pipeline, added 2026-10-16)
 Voice was originally an excluded feature. It was added on request, following OpenAI's voice-agents guide, as a **chained pipeline**: speech-to-text, then the existing agent, then optional text-to-speech.
 - **Mic → `POST /api/voice/transcribe`.**

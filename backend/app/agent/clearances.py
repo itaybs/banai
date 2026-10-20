@@ -29,7 +29,7 @@ def cm(mm: int) -> str:
     return f"{mm / 10:.1f}".removesuffix(".0")
 
 
-def _free_below(compartment: dict, y: int) -> int:
+def free_below(compartment: dict, y: int) -> int:
     """Clear height under height y, down to the nearest shelf or drawer top (or the bottom)."""
     tops = [s["y"] + s["thickness"] for s in compartment["shelves"]] + [d["y"] + d["height"] for d in compartment["drawers"]]
     return y - max((top for top in tops if top <= y), default=0)
@@ -38,7 +38,7 @@ def _free_below(compartment: dict, y: int) -> int:
 def _rail_clearances(design: dict) -> dict[str, tuple[int, int, int]]:
     """rail id -> (compartment index from the left, rail y, free height below it)."""
     return {
-        rail["id"]: (index, rail["y"], _free_below(compartment, rail["y"]))
+        rail["id"]: (index, rail["y"], free_below(compartment, rail["y"]))
         for index, compartment in enumerate(design["compartments"])
         for rail in compartment["rails"]
     }
@@ -89,7 +89,7 @@ def proposal_warning(before: dict, after: dict, ops: list[dict], language: Langu
         for rail in sorted(compartment["rails"], key=lambda r: r["y"]):
             if rail["id"] not in rails_touched and not shelf_moved:
                 continue
-            free = _free_below(compartment, rail["y"])
+            free = free_below(compartment, rail["y"])
             previous = rails_before.get(rail["id"], (index, rail["y"], None))[2]
             if free < RAIL_MIN_FREE_BELOW and (previous is None or rail["id"] in rails_touched or free < previous):
                 return RAIL_WARNING[language].format(y=cm(rail["y"]), free=cm(free))
@@ -113,6 +113,22 @@ def long_items_note(question: str, design: dict, language: Language) -> str | No
         LONG_ITEMS_RAIL[language].format(y=cm(y), n=index + 1, free=cm(free)) for index, y, free in short
     )
     return LONG_ITEMS_NOTE[language].format(rails=rails)
+
+
+def design_issues(design: dict) -> list[dict]:
+    """Every clearance below the thresholds in a whole design, left to right and bottom to top.
+    Each issue: {"kind": "rail"|"shelves", "compartment": index from the left (1-based), and
+    "y"/"free" (rail) or "low"/"high"/"gap" (shelves), all mm}. Used by the design summary PDF."""
+    issues = []
+    for index, compartment in enumerate(design["compartments"], start=1):
+        for rail in sorted(compartment["rails"], key=lambda r: r["y"]):
+            free = free_below(compartment, rail["y"])
+            if free < RAIL_MIN_FREE_BELOW:
+                issues.append({"kind": "rail", "compartment": index, "y": rail["y"], "free": free})
+        for lower, upper, gap in _shelf_gaps(compartment):
+            if gap < SHELF_MIN_GAP:
+                issues.append({"kind": "shelves", "compartment": index, "low": lower["y"], "high": upper["y"], "gap": gap})
+    return issues
 
 
 def with_note(text: str, note: str | None) -> str:
