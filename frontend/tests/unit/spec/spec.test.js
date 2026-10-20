@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchSpecPdf } from '../../../src/api/client.js';
 import { STRINGS } from '../../../src/chat/i18n.js';
-import { shareOrDownload } from '../../../src/spec/share.js';
+import { isTouchDevice, shareOrDownload } from '../../../src/spec/share.js';
 import { INTENDED_USES, SPEC_LIMITS, specFilename, specPreferences, specRequest } from '../../../src/spec/specRequest.js';
 import { CAPTURE_HEIGHT, CAPTURE_WIDTH, frontView } from '../../../src/viewer/capture.js';
 
@@ -59,21 +59,38 @@ describe('shareOrDownload', () => {
     return { link, doc: { createElement: vi.fn(() => link), body: { append: vi.fn() } } };
   };
   const urls = { createObjectURL: vi.fn(() => 'blob:1'), revokeObjectURL: vi.fn() };
+  const touch = vi.fn((query) => ({ matches: query === '(pointer: coarse)' }));
+  const mouse = vi.fn(() => ({ matches: false }));
 
-  it('uses the share sheet when the browser can share the file', async () => {
+  it('detects touch devices with (pointer: coarse)', () => {
+    expect(isTouchDevice(touch)).toBe(true);
+    expect(isTouchDevice(mouse)).toBe(false);
+    expect(isTouchDevice(undefined)).toBe(false);
+    expect(touch).toHaveBeenCalledWith('(pointer: coarse)');
+  });
+
+  it('uses the share sheet on a touch device that can share the file', async () => {
     const nav = { canShare: vi.fn(() => true), share: vi.fn(async () => {}) };
     const { doc, link } = fakeDoc();
-    await expect(shareOrDownload(pdf, 'banai-design-r4.pdf', { title: 'T', nav, doc, urls })).resolves.toBe('shared');
+    await expect(shareOrDownload(pdf, 'banai-design-r4.pdf', { title: 'T', nav, doc, urls, matchMediaImpl: touch })).resolves.toBe('shared');
     const [{ files, title }] = nav.share.mock.calls[0];
     expect(title).toBe('T');
     expect(files[0]).toMatchObject({ name: 'banai-design-r4.pdf', type: 'application/pdf' });
     expect(link.click).not.toHaveBeenCalled();
   });
 
-  it('downloads when sharing files is not supported, and when sharing fails', async () => {
+  it('downloads on desktop even when the browser could share files', async () => {
+    const nav = { canShare: vi.fn(() => true), share: vi.fn(async () => {}) };
+    const { doc, link } = fakeDoc();
+    await expect(shareOrDownload(pdf, 'a.pdf', { nav, doc, urls, matchMediaImpl: mouse })).resolves.toBe('downloaded');
+    expect(nav.share).not.toHaveBeenCalled();
+    expect(link.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads on a touch device when sharing files is not supported, or sharing fails', async () => {
     for (const nav of [{}, { canShare: () => false, share: vi.fn() }, { canShare: () => true, share: vi.fn(async () => { throw new Error('NotAllowed'); }) }]) {
       const { doc, link } = fakeDoc();
-      await expect(shareOrDownload(pdf, 'a.pdf', { nav, doc, urls })).resolves.toBe('downloaded');
+      await expect(shareOrDownload(pdf, 'a.pdf', { nav, doc, urls, matchMediaImpl: touch })).resolves.toBe('downloaded');
       expect(link).toMatchObject({ href: 'blob:1', download: 'a.pdf' });
       expect(link.click).toHaveBeenCalledTimes(1);
     }
@@ -82,7 +99,7 @@ describe('shareOrDownload', () => {
   it('reports a cancelled share sheet without downloading', async () => {
     const nav = { canShare: () => true, share: vi.fn(async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); }) };
     const { doc, link } = fakeDoc();
-    await expect(shareOrDownload(pdf, 'a.pdf', { nav, doc, urls })).resolves.toBe('cancelled');
+    await expect(shareOrDownload(pdf, 'a.pdf', { nav, doc, urls, matchMediaImpl: touch })).resolves.toBe('cancelled');
     expect(link.click).not.toHaveBeenCalled();
   });
 });
