@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { buildWardrobe, disposeWardrobe } from './buildWardrobe.js';
+import { CAPTURE_HEIGHT, CAPTURE_WIDTH, frontView } from './capture.js';
 import { frameOf } from './builders/frame.js';
 import { createDimensions } from './dimensions.js';
 import { createHighlighter } from './highlight.js';
@@ -127,6 +128,35 @@ export function createViewer(container, store) {
     controls,
     canvas: renderer.domElement,
     meshOf: (componentId) => group?.children.find((mesh) => mesh.userData.componentId === componentId) ?? null,
+    /**
+     * A PNG data URL of the wardrobe seen straight from the front, without dimension lines or the
+     * selection outline (for the design summary PDF). The user's view is restored afterwards.
+     */
+    captureFront() {
+      const saved = { position: camera.position.clone(), target: controls.target.clone(), aspect: camera.aspect };
+      const size = renderer.getSize(new THREE.Vector2());
+      const overlays = ['dimensions', 'highlight'].map((name) => scene.getObjectByName(name)).filter(Boolean);
+      overlays.forEach((layer) => { layer.visible = false; });
+      try {
+        renderer.setSize(CAPTURE_WIDTH, CAPTURE_HEIGHT, false);
+        camera.aspect = CAPTURE_WIDTH / CAPTURE_HEIGHT;
+        camera.updateProjectionMatrix();
+        const { position, target } = frontView(store.getState().design.dimensions, camera.fov, camera.aspect);
+        camera.position.set(position.x, position.y, position.z);
+        camera.lookAt(target.x, target.y, target.z);
+        renderer.render(scene, camera);
+        return renderer.domElement.toDataURL('image/png');
+      } finally {
+        overlays.forEach((layer) => { layer.visible = true; });
+        renderer.setSize(size.x, size.y, false);
+        camera.aspect = saved.aspect;
+        camera.updateProjectionMatrix();
+        camera.position.copy(saved.position);
+        controls.target.copy(saved.target);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+    },
     /** Client (page) coordinates of a component's centre, for tests and tooling. */
     screenPointOf(componentId) {
       const mesh = this.meshOf(componentId);

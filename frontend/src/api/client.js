@@ -58,12 +58,12 @@ export const transcribe = (blob, language, fetchImpl = fetch) => request(
   { method: 'POST', headers: { 'Content-Type': blob.type.split(';')[0] || 'audio/webm' }, body: blob },
 );
 
-/** Text to speech: { text, language, signature } -> an audio/mpeg Blob (signature = the chat replySignature). */
-export async function fetchSpeech(payload, fetchImpl = fetch) {
+/** POST JSON, get a binary Blob back (errors still come as the JSON envelope). */
+async function postForBlob(path, payload, fetchImpl) {
   if (!API_BASE_URL) throw new Error('The API base URL is not configured');
   let response;
   try {
-    response = await fetchImpl(`${API_BASE_URL}/api/voice/speech`, {
+    response = await fetchImpl(`${API_BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -73,13 +73,22 @@ export async function fetchSpeech(payload, fetchImpl = fetch) {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new ApiError(body?.error?.message ?? `Request to /api/voice/speech failed with status ${response.status}`, {
+    throw new ApiError(body?.error?.message ?? `Request to ${path} failed with status ${response.status}`, {
       status: response.status,
       code: body?.error?.code ?? 'HTTP_ERROR',
     });
   }
   return response.blob();
 }
+
+/** Text to speech: { text, language, signature } -> an audio/mpeg Blob (signature = the chat replySignature). */
+export const fetchSpeech = (payload, fetchImpl = fetch) => postForBlob('/api/voice/speech', payload, fetchImpl);
+
+/**
+ * Design summary PDF for the carpenter:
+ * { design, revision, language, preferences, frontImage?, includeSummary? } -> an application/pdf Blob.
+ */
+export const fetchSpecPdf = (payload, fetchImpl = fetch) => postForBlob('/api/spec/pdf', payload, fetchImpl);
 
 /** Apply a signed proposal: { design, revision, proposal } -> { design, revision }. 409 = stale. */
 export const applyProposal = (payload, fetchImpl = fetch) => postJson('/api/proposals/apply', payload, fetchImpl);

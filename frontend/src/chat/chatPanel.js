@@ -30,7 +30,7 @@ function languageSwitch(language, t) {
 }
 
 export function mountChat(container, {
-  model, onConfirm, language = createLanguage(), speaker = createSpeaker(), readAloud = readAloudPreference(),
+  model, onConfirm, onSpec = null, language = createLanguage(), speaker = createSpeaker(), readAloud = readAloudPreference(),
 }) {
   container.classList.add('panel--chat');
   let draft = '';
@@ -118,9 +118,16 @@ export function mountChat(container, {
         ? el('span', { className: 'chat__status chat__status--online', text: t.online, attrs: { title: t.onlineTitle } })
         : el('span', { className: 'chat__status', text: t.comingSoon, attrs: { title: t.comingSoonTitle } }),
     ]);
+    // "Summary for the carpenter": a PDF of the confirmed design (never while a proposal waits).
+    const specButton = onSpec ? el('button', { className: 'btn chat__spec', text: t.spec.button, attrs: { type: 'button' } }) : null;
+    if (specButton) {
+      specButton.dataset.testid = 'chat-spec';
+      specButton.addEventListener('click', () => onSpec());
+    }
     const languageBar = el('div', { className: 'chat__language' }, [
       el('span', { className: 'chat__language-label', text: t.switchLabel }),
       languageSwitch(language, t),
+      ...(specButton ? [specButton] : []),
     ]);
 
     const input = el('textarea', { className: 'chat__input', attrs: { rows: '2', maxlength: String(MAX_MESSAGE_LENGTH), placeholder: (hintKey && t.composerHints[hintKey]) || t.placeholder, dir: 'auto', 'aria-label': t.inputLabel } });
@@ -208,7 +215,7 @@ export function mountChat(container, {
     const controls = model.isConnected() ? [readAloudToggle(t)] : [];
     const footerRow = el('div', { className: 'chat__footer-row' }, [hint, counter, el('div', { className: 'chat__footer-controls' }, controls)]);
     container.replaceChildren(header, languageBar, el('div', { className: 'chat__body' }, [welcome, list, proposalSlot]), el('div', { className: 'chat__footer' }, [composer, footerRow]));
-    view = { t, input, sendButton, composer, welcome, list, proposalSlot, typing, submit, hint, mic, renderedCount: 0, renderedProposalKey: null };
+    view = { t, input, sendButton, specButton, composer, welcome, list, proposalSlot, typing, submit, hint, mic, renderedCount: 0, renderedProposalKey: null };
     showVoiceState();
   }
 
@@ -249,6 +256,11 @@ export function mountChat(container, {
     typing.hidden = !busy;
     if (busy) list.append(typing); // keep the indicator last, under the newest message
     sendButton.disabled = busy;
+    if (view.specButton) {
+      const waiting = busy || model.getProposalStatus() === 'pending';
+      view.specButton.disabled = waiting;
+      view.specButton.title = waiting ? t.spec.buttonPending : '';
+    }
     composer.setAttribute('aria-busy', String(busy));
     list.scrollTop = list.scrollHeight;
     showVoiceState();
