@@ -38,6 +38,10 @@ The **Room** panel sets:
 
 *Floor plan with the door swing on: a 2000 mm wardrobe with two hinged doors in a 4000 × 3600 mm room. The wide right door's swing reaches the bed, so the bed is outlined in amber. There's no text, warning or rule.*
 
+![The Room panel in Hebrew, right to left, in two parts: on the right the top (room size in cm, wardrobe position, room style, walls, floor), on the left the rest after scrolling (light, the door-swing switch and the four views)](images/room-panel-hebrew.png)
+
+*The Room panel in Hebrew (right to left, sizes in cm), at 100% browser zoom. It scrolls in a short window, so it's shown in two parts: the top on the right, and the rest after scrolling on the left.*
+
 ## Commits
 
 | Commit | |

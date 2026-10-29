@@ -10,7 +10,7 @@ Status as of 2026-10-29. All five PRs are open and not reviewed yet.
 | <a href="start-templates/README.md"><img src="start-templates/images/start-screen-english.png" width="220" alt="The start screen with the template gallery"></a> | **[Template gallery with real 3D thumbnails](start-templates/README.md)**: three new starting templates next to the basic wardrobe, with real 3D thumbnails and an inside view. | [#86](https://github.com/JonathanZouari/banai/pull/86) · open, conflicts with `dev` |
 | <a href="proposal-diff/README.md"><img src="proposal-diff/images/change-row-hover-3d-highlight.png" width="220" alt="A change row highlighting its part in 3D"></a> | **[What will change, in the proposal card](proposal-diff/README.md)**: the AI proposal lists the exact changes, computed from the design, and highlights each part in 3D. | [#70](https://github.com/JonathanZouari/banai/pull/70) · open, conflicts with `dev` |
 | <a href="design-summary/README.md"><img src="design-summary/images/design-summary-card.png" width="220" alt="The design summary card"></a> | **[Design summary card](design-summary/README.md)**: counts, gross interior volume and hanging length at the top of the Properties panel. | [#53](https://github.com/JonathanZouari/banai/pull/53) · open, conflicts with `dev` |
-| *(screenshot to come)* | **[Agent review: fixes from 30 UI tests and a language selector](agent-review/README.md)**: 30 behaviour tests went from 23/4/3 to 30/0/0 pass/partial/fail; an explicit reply language replaces detection. | [#18](https://github.com/JonathanZouari/banai/pull/18) · open, conflicts with `dev` |
+| <a href="agent-review/README.md"><img src="agent-review/images/chat-language-selector-hebrew.png" width="120" alt="The language selector above the chat"></a> | **[Agent review: fixes from 30 UI tests and a language selector](agent-review/README.md)**: 30 behaviour tests went from 23/4/3 to 30/0/0 pass/partial/fail; an explicit reply language replaces detection. | [#18](https://github.com/JonathanZouari/banai/pull/18) · open, conflicts with `dev` |
 
 ## Earlier work
 
@@ -23,3 +23,7 @@ Two branches that were never submitted as their own PRs. **Both are not submitte
 - **Frontend:** a "Summary for the carpenter" dialog with optional answers (intended use, location, timeline, requests) and a straight front capture from the 3D view. The PDF went to the share sheet on touch devices, or was downloaded on desktop.
 
 It waited for #18 to be merged first. Meanwhile upstream shipped its own carpenter PDF ("Generate Style Profile", `POST /api/export/pdf`, with reportlab).
+
+![The "Summary for the carpenter" dialog in Hebrew: the disclaimer that this is a visual design draft and not a manufacturing drawing, then optional fields for intended use, installation location, timeline, special requests and a name to show](images/earlier-work-carpenter-summary-dialog.png)
+
+*The "Summary for the carpenter" (סיכום לנגר) dialog on `pr/spec-pdf`, at 100% browser zoom: the disclaimer first, then the optional fields. Its button sits beside the chat's language selector.*

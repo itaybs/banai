@@ -35,7 +35,19 @@ The model (`gpt-5.4-mini`) is unchanged, and there are no infrastructure, Railwa
 
 ## Screenshots
 
-*Screenshots are being added (this PR had none).*
+![The chat panel in Hebrew with the "שפת הצ׳אט" (chat language) selector above it, עברית selected](images/chat-language-selector-hebrew.png)
+
+*The language selector above the chat, with Hebrew (the default) selected. The whole chat is right to left.*
+
+![The same chat panel in English, with English selected](images/chat-language-selector-english.png)
+
+*With English selected, the chat and its suggestions switch to English. Replies come only in the selected language, whatever language the customer writes in.*
+
+![The message box filled close to the limit, with the counter "1,960 / 2,000" under it](images/character-counter-near-limit.png)
+
+*A character counter appears near the 2,000-character limit.*
+
+These were taken from the `pr/agent-review` branch at 100% browser zoom. No chat messages were sent.
 
 ## Commits
 
