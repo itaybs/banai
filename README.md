@@ -7,10 +7,39 @@ An MVP for designing standard straight wardrobes with three synchronized parts:
 
 All three edit **one canonical design state** through the same typed operations.
 
+## My contributions to this fork
+
+Features built in this fork ([itaybs/banai](https://github.com/itaybs/banai)) and proposed upstream as pull requests to `dev`.
+
+### Latest: a room around the wardrobe ([#94](https://github.com/JonathanZouari/banai/pull/94))
+
+A wardrobe is hard to judge floating on a grey grid. **View in a room** places it inside a furnished room in the 3D viewer, so you can see it against a wall, next to a bed, from the doorway, in morning or evening light. The room is decoration only: it never changes the wardrobe and is never saved with the design.
+
+| | |
+|---|---|
+| <img src="docs/features/room-scene/images/doorway-view-morning.png" alt="The doorway view in the morning: a white three-door wardrobe on a warm wall, sun through the window and the Room panel on the left"> | <img src="docs/features/room-scene/images/doorway-view-evening.png" alt="The same doorway view in the evening: a low warm sun in the window and the lamps glowing"> |
+| *From the doorway, in the morning.* | *The same view in the evening.* |
+
+<img src="docs/features/room-scene/images/floor-plan-door-swing-amber.png" width="560" alt="A floor plan from above: the wide wardrobe door's swing arc reaches the bed, whose outline is amber">
+
+*Floor plan with the door swing on: the wide right door of the wardrobe swings into the bed, so the bed is outlined in amber.*
+
+[Full feature page](docs/features/room-scene/README.md) · [PR #94](https://github.com/JonathanZouari/banai/pull/94)
+
+### Earlier features
+
+- <img src="docs/features/start-templates/images/start-screen-english.png" width="120" alt="The template gallery"> **[Template gallery with real 3D thumbnails](docs/features/start-templates/README.md)**: three new starting templates with real 3D thumbnails and an inside view. [#86](https://github.com/JonathanZouari/banai/pull/86)
+- <img src="docs/features/proposal-diff/images/change-row-hover-3d-highlight.png" width="120" alt="A change row highlighting its part in 3D"> **[What will change, in the proposal card](docs/features/proposal-diff/README.md)**: the AI proposal lists the exact changes and highlights each part in 3D. [#70](https://github.com/JonathanZouari/banai/pull/70)
+- <img src="docs/features/design-summary/images/design-summary-card.png" width="120" alt="The design summary card"> **[Design summary card](docs/features/design-summary/README.md)**: counts, interior volume and hanging length at the top of the Properties panel. [#53](https://github.com/JonathanZouari/banai/pull/53)
+- <img src="docs/features/agent-review/images/chat-language-selector-hebrew.png" width="120" alt="The language selector above the chat"> **[Agent review and a language selector](docs/features/agent-review/README.md)**: fixes from 30 UI tests of the AI designer, and an explicit reply language. [#18](https://github.com/JonathanZouari/banai/pull/18)
+
+All features, with status, commits and screenshots: [docs/features/README.md](docs/features/README.md)
+
 ![BanAI workspace](docs/screenshots/02-workspace.png)
 
 ## Table of contents
 
+- [My contributions to this fork](#my-contributions-to-this-fork)
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [How it works](#how-it-works)
