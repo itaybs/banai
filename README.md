@@ -158,3 +158,4 @@ Save and Render in the top bar open dialogs that say those features aren't avail
 - [`docs/schema.md`](docs/schema.md): design schema and op protocol
 - [`docs/frontend.md`](docs/frontend.md): store, viewer and editor
 - [`docs/railway.md`](docs/railway.md) and [`docs/supabase.md`](docs/supabase.md): infrastructure
+- [`docs/features/`](docs/features/README.md): features built in this fork and proposed upstream, with screenshots
